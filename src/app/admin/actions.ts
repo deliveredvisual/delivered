@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { requireAdmin } from "@/lib/auth";
+import { requireActiveStudio, requireProject } from "@/lib/auth";
 import { bucket, db } from "@/lib/env";
 import { hashPassword, newId, newSlug } from "@/lib/crypto";
 import { DAY, DELIVERY_DAYS } from "@/lib/format";
@@ -37,7 +37,7 @@ function projectFields(form: FormData) {
 }
 
 export async function createProject(_prev: FormState, form: FormData): Promise<FormState> {
-  await requireAdmin();
+  const { studio } = await requireActiveStudio();
   const fields = projectFields(form);
   if (!fields.title) return { error: "Give the project a title." };
   const password = str(form, "password", 200);
@@ -47,6 +47,7 @@ export async function createProject(_prev: FormState, form: FormData): Promise<F
     .insert(projects)
     .values({
       id,
+      studioId: studio.id,
       slug: newSlug(),
       ...fields,
       passwordHash: password ? await hashPassword(password) : null,
@@ -68,7 +69,7 @@ export async function createProject(_prev: FormState, form: FormData): Promise<F
 }
 
 export async function updateProject(projectId: string, _prev: FormState, form: FormData): Promise<FormState> {
-  await requireAdmin();
+  await requireProject(projectId);
   const fields = projectFields(form);
   if (!fields.title) return { error: "Give the project a title." };
   const password = str(form, "password", 200);
@@ -83,14 +84,14 @@ export async function updateProject(projectId: string, _prev: FormState, form: F
 }
 
 export async function setInvoicePaid(projectId: string, paid: boolean) {
-  await requireAdmin();
+  await requireProject(projectId);
   await db().update(projects).set({ invoicePaid: paid }).where(eq(projects.id, projectId));
   revalidatePath(`/admin/p/${projectId}`);
   revalidatePath("/admin");
 }
 
 export async function setArchived(projectId: string, archived: boolean) {
-  await requireAdmin();
+  await requireProject(projectId);
   const update: Partial<typeof projects.$inferInsert> = { archived };
   // Restoring an expired delivery gives it another 30 days.
   if (!archived) {
@@ -103,7 +104,7 @@ export async function setArchived(projectId: string, archived: boolean) {
 }
 
 export async function extendProject(projectId: string, days: number) {
-  await requireAdmin();
+  await requireProject(projectId);
   await db()
     .update(projects)
     .set({ expiresAt: sql`${projects.expiresAt} + ${days * DAY}` })
@@ -113,7 +114,7 @@ export async function extendProject(projectId: string, days: number) {
 }
 
 export async function newLink(projectId: string) {
-  await requireAdmin();
+  await requireProject(projectId);
   await db().update(projects).set({ slug: newSlug() }).where(eq(projects.id, projectId));
   revalidatePath(`/admin/p/${projectId}`);
 }
@@ -129,7 +130,7 @@ async function deletePrefix(prefix: string) {
 }
 
 export async function deleteProject(projectId: string) {
-  await requireAdmin();
+  await requireProject(projectId);
   await deletePrefix(`p/${projectId}/`);
   await db().delete(projects).where(eq(projects.id, projectId));
   revalidatePath("/admin");
@@ -139,7 +140,7 @@ export async function deleteProject(projectId: string) {
 // ---------- Sets ----------
 
 export async function addSet(projectId: string, form: FormData) {
-  await requireAdmin();
+  await requireProject(projectId);
   const name = str(form, "name", 60);
   if (!name) return;
   const [{ n }] = await db().select({ n: sql<number>`count(*)` }).from(sets).where(eq(sets.projectId, projectId));
@@ -148,7 +149,7 @@ export async function addSet(projectId: string, form: FormData) {
 }
 
 export async function renameSet(projectId: string, setId: string, form: FormData) {
-  await requireAdmin();
+  await requireProject(projectId);
   const name = str(form, "name", 60);
   if (!name) return;
   await db().update(sets).set({ name }).where(and(eq(sets.id, setId), eq(sets.projectId, projectId)));
@@ -156,15 +157,19 @@ export async function renameSet(projectId: string, setId: string, form: FormData
 }
 
 export async function deleteSet(projectId: string, setId: string) {
-  await requireAdmin();
-  await db().update(photos).set({ setId: null }).where(eq(photos.setId, setId));
+  await requireProject(projectId);
+  await db().update(photos).set({ setId: null }).where(and(eq(photos.setId, setId), eq(photos.projectId, projectId)));
   await db().delete(sets).where(and(eq(sets.id, setId), eq(sets.projectId, projectId)));
   revalidatePath(`/admin/p/${projectId}`);
 }
 
 export async function movePhotos(projectId: string, photoIds: string[], setId: string | null) {
-  await requireAdmin();
+  await requireProject(projectId);
   if (!photoIds.length) return;
+  if (setId) {
+    const set = await db().query.sets.findFirst({ where: and(eq(sets.id, setId), eq(sets.projectId, projectId)) });
+    if (!set) return;
+  }
   await db()
     .update(photos)
     .set({ setId })
@@ -173,7 +178,7 @@ export async function movePhotos(projectId: string, photoIds: string[], setId: s
 }
 
 export async function deletePhotos(projectId: string, photoIds: string[]) {
-  await requireAdmin();
+  await requireProject(projectId);
   if (!photoIds.length) return;
   const rows = await db()
     .select()
@@ -190,7 +195,7 @@ export async function deletePhotos(projectId: string, photoIds: string[]) {
 // ---------- Films ----------
 
 export async function addFilm(projectId: string, form: FormData) {
-  await requireAdmin();
+  await requireProject(projectId);
   const title = str(form, "title", 100);
   if (!title) return;
   const aspect = str(form, "aspect", 10) || "16:9";
@@ -200,15 +205,21 @@ export async function addFilm(projectId: string, form: FormData) {
 }
 
 export async function deleteFilm(projectId: string, filmId: string) {
-  await requireAdmin();
+  await requireProject(projectId);
   await deletePrefix(`p/${projectId}/films/${filmId}/`);
   await db().delete(films).where(and(eq(films.id, filmId), eq(films.projectId, projectId)));
   revalidatePath(`/admin/p/${projectId}`);
 }
 
 export async function deleteVersion(projectId: string, versionId: string) {
-  await requireAdmin();
-  const v = await db().query.filmVersions.findFirst({ where: eq(filmVersions.id, versionId) });
+  await requireProject(projectId);
+  const rows = await db()
+    .select({ v: filmVersions })
+    .from(filmVersions)
+    .innerJoin(films, eq(films.id, filmVersions.filmId))
+    .where(and(eq(filmVersions.id, versionId), eq(films.projectId, projectId)))
+    .limit(1);
+  const v = rows[0]?.v;
   if (!v) return;
   const keys = [v.fileKey, v.posterKey].filter((k): k is string => !!k);
   if (keys.length) await bucket().delete(keys);

@@ -1,10 +1,84 @@
 import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /** A delivery: one shoot for one client. Clients reach it through its private `slug` link. */
+/** A creative's business (photographer, filmmaker…). Every project belongs to one studio; team members share it. */
+export const studios = sqliteTable("studios", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().default(""), // shown to clients as the contact address
+  status: text("status", { enum: ["active", "pending"] }).notNull().default("pending"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+/** Anyone with a sign-in: creatives (and their team) or clients. */
+export const users = sqliteTable(
+  "users",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull(), // stored lower-case
+    name: text("name").notNull(),
+    company: text("company").notNull().default(""),
+    kind: text("kind", { enum: ["creative", "client"] }).notNull(),
+    passwordHash: text("password_hash").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [uniqueIndex("users_email").on(t.email)],
+);
+
+/** Who works in which studio. The owner manages the team; members do everything else. */
+export const memberships = sqliteTable(
+  "memberships",
+  {
+    studioId: text("studio_id").notNull().references(() => studios.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["owner", "member"] }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [uniqueIndex("memberships_unique").on(t.studioId, t.userId), index("memberships_user").on(t.userId)],
+);
+
+/** One-off links a studio owner sends to add someone to the team. */
+export const invites = sqliteTable(
+  "invites",
+  {
+    token: text("token").primaryKey(),
+    studioId: text("studio_id").notNull().references(() => studios.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    usedBy: text("used_by"),
+  },
+  (t) => [index("invites_studio").on(t.studioId)],
+);
+
+/** Deliveries a signed-in client has opened, so they show up on their home page. */
+export const savedDeliveries = sqliteTable(
+  "saved_deliveries",
+  {
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    savedAt: integer("saved_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [uniqueIndex("saved_unique").on(t.userId, t.projectId)],
+);
+
+/** Failed sign-ins, to slow down password guessing. */
+export const signinFailures = sqliteTable(
+  "signin_failures",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull(),
+    at: integer("at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [index("signin_failures_email").on(t.email, t.at)],
+);
+
+export const DEFAULT_STUDIO_ID = "studio_default";
+
 export const projects = sqliteTable(
   "projects",
   {
     id: text("id").primaryKey(),
+    studioId: text("studio_id").notNull().default(DEFAULT_STUDIO_ID),
     slug: text("slug").notNull(),
     title: text("title").notNull(),
     clientName: text("client_name").notNull().default(""),
@@ -24,7 +98,7 @@ export const projects = sqliteTable(
     licenceCredit: text("licence_credit").notNull().default(""),
     licenceTerms: text("licence_terms").notNull().default(""),
   },
-  (t) => [uniqueIndex("projects_slug").on(t.slug)],
+  (t) => [uniqueIndex("projects_slug").on(t.slug), index("projects_studio").on(t.studioId)],
 );
 
 /** Groups of photos inside a project, e.g. Track, Static, Details. */
@@ -141,3 +215,5 @@ export type SetRow = typeof sets.$inferSelect;
 export type Film = typeof films.$inferSelect;
 export type FilmVersion = typeof filmVersions.$inferSelect;
 export type Comment = typeof comments.$inferSelect;
+export type Studio = typeof studios.$inferSelect;
+export type User = typeof users.$inferSelect;

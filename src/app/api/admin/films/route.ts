@@ -1,6 +1,6 @@
 import { and, eq, max } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { adminGuard, fail, json, projectIdFromKey } from "@/lib/api";
+import { fail, json, projectIdFromKey, studioProject } from "@/lib/api";
 import { db } from "@/lib/env";
 import { films, filmVersions } from "@/db/schema";
 
@@ -17,9 +17,9 @@ type NewVersion = {
 
 /** Registers a newly uploaded film file as the next version (v1, v2, …). */
 export async function POST(request: Request): Promise<Response> {
-  const denied = await adminGuard();
-  if (denied) return denied;
   const body = (await request.json()) as NewVersion;
+  const access = await studioProject(String(body.projectId ?? ""));
+  if ("denied" in access) return access.denied;
   const d = db();
   const film = await d.query.films.findFirst({ where: and(eq(films.id, body.filmId), eq(films.projectId, body.projectId)) });
   if (!film) return fail("No such film", 404);

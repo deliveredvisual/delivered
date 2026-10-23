@@ -6,7 +6,7 @@ import { newId } from "./crypto";
 
 export type ProjectSummary = Awaited<ReturnType<typeof listProjects>>[number];
 
-export async function listProjects() {
+export async function listProjects(studioId: string) {
   const d = db();
   const rows = await d
     .select({
@@ -17,13 +17,17 @@ export async function listProjects() {
       filmBytes: sql<number>`(select coalesce(sum(v.size), 0) from film_versions v join films f on f.id = v.film_id where f.project_id = "projects"."id")`,
     })
     .from(projects)
+    .where(eq(projects.studioId, studioId))
     .orderBy(desc(projects.createdAt));
 
   const latest = await d
     .select({ projectId: events.projectId, viewer: events.viewer, action: events.action, detail: events.detail, createdAt: events.createdAt })
     .from(events)
     .where(
-      sql`"events"."created_at" = (select max(e2.created_at) from events e2 where e2.project_id = "events"."project_id")`,
+      and(
+        sql`"events"."project_id" in (select id from projects where studio_id = ${studioId})`,
+        sql`"events"."created_at" = (select max(e2.created_at) from events e2 where e2.project_id = "events"."project_id")`,
+      ),
     );
   const byProject = new Map(latest.map((e) => [e.projectId, e]));
 

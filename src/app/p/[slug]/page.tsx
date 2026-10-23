@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { fullResHeld, getProjectBySlug, getViewer, hasProjectAccess, isAdmin, isExpired } from "@/lib/auth";
-import { studio as getStudio } from "@/lib/env";
+import { fullResHeld, getProjectBySlug, getViewer, hasProjectAccess, isExpired, managesProject, saveDelivery, studioFor } from "@/lib/auth";
 import { getProjectFull, logView, picksFor } from "@/lib/queries";
 import { formatDate } from "@/lib/format";
 import { CenteredCard, ClientTopbar } from "./client-chrome";
@@ -12,14 +11,13 @@ export const metadata: Metadata = { title: "Delivery" };
 
 export default async function DeliveryPage({ params }: PageProps<"/p/[slug]">) {
   const { slug } = await params;
-  const studio = getStudio();
   const project = await getProjectBySlug(slug);
   if (!project) notFound();
-  const admin = await isAdmin();
+  const [admin, studio] = await Promise.all([managesProject(project), studioFor(project)]);
 
   if (isExpired(project) && !admin) {
     return (
-      <CenteredCard studio={studio.name}>
+      <CenteredCard studio={studio.name} next={`/p/${slug}`}>
         <h1 className="h2">This delivery has been archived</h1>
         <p className="muted" style={{ margin: 0 }}>
           The files for <strong style={{ color: "var(--ink)" }}>{project.title}</strong> are no longer online.
@@ -35,7 +33,7 @@ export default async function DeliveryPage({ params }: PageProps<"/p/[slug]">) {
 
   if (!(await hasProjectAccess(project))) {
     return (
-      <CenteredCard studio={studio.name}>
+      <CenteredCard studio={studio.name} next={`/p/${slug}`}>
         <div className="eyebrow">{project.clientName || "Private delivery"}</div>
         <h1 className="h2">{project.title}</h1>
         <UnlockForm slug={slug} />
@@ -45,13 +43,13 @@ export default async function DeliveryPage({ params }: PageProps<"/p/[slug]">) {
 
   const full = await getProjectFull(project.id);
   if (!full) notFound();
-  const [picks, viewer] = await Promise.all([picksFor(project.id), getViewer()]);
+  const [picks, viewer] = await Promise.all([picksFor(project.id), getViewer(project), saveDelivery(project)]);
 
   if (!admin) await logView(project.id, viewer);
 
   return (
     <>
-      <ClientTopbar studio={studio.name} />
+      <ClientTopbar studio={studio.name} next={`/p/${slug}`} />
       <Gallery
         slug={slug}
         studio={studio.name}

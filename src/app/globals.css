@@ -194,3 +194,4 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .thumbs-admin figure { margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .thumbs-admin .t { aspect-ratio: 3 / 2; background: #ececea; overflow: hidden; }
 .thumbs-admin img { width: 100%; height: 100%; object-fit: cover; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }

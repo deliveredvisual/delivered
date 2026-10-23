@@ -1,4 +1,4 @@
-import { adminGuard, fail, json, projectIdFromKey } from "@/lib/api";
+import { fail, json, projectIdFromKey, studioProject } from "@/lib/api";
 import { bucket } from "@/lib/env";
 
 /**
@@ -26,13 +26,13 @@ async function sizedBody(request: Request): Promise<ReadableStream | ArrayBuffer
  * Chunks go through the app because a Worker request can be up to 100 MB; files are split into 32 MB parts.
  */
 export async function POST(request: Request): Promise<Response> {
-  const denied = await adminGuard();
-  if (denied) return denied;
-
   const url = new URL(request.url);
   const op = url.searchParams.get("op");
   const key = url.searchParams.get("key") ?? "";
-  if (!projectIdFromKey(key)) return fail("Bad key");
+  const projectId = projectIdFromKey(key);
+  if (!projectId) return fail("Bad key");
+  const access = await studioProject(projectId);
+  if ("denied" in access) return access.denied;
   const contentType = url.searchParams.get("type") || "application/octet-stream";
   const b = bucket();
 

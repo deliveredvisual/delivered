@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { projectIdFromKey } from "@/lib/api";
-import { fullResHeld, hasProjectAccess, isAdmin, isExpired } from "@/lib/auth";
+import { fullResHeld, hasProjectAccess, isExpired, managesProject } from "@/lib/auth";
 import { bucket, db } from "@/lib/env";
 import { projects } from "@/db/schema";
 
@@ -28,9 +28,10 @@ export async function GET(request: Request): Promise<Response> {
   const projectId = projectIdFromKey(key);
   if (!projectId) return new Response("Not found", { status: 404 });
 
-  if (!(await isAdmin())) {
-    const project = await db().query.projects.findFirst({ where: eq(projects.id, projectId) });
-    if (!project || !(await hasProjectAccess(project)) || isExpired(project)) {
+  const project = await db().query.projects.findFirst({ where: eq(projects.id, projectId) });
+  if (!project) return new Response("Not found", { status: 404 });
+  if (!(await managesProject(project))) {
+    if (!(await hasProjectAccess(project)) || isExpired(project)) {
       return new Response("Not found", { status: 404 });
     }
     const held = fullResHeld(project);

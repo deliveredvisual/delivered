@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { adminGuard, fail, json, projectIdFromKey } from "@/lib/api";
+import { fail, json, projectIdFromKey, studioProject } from "@/lib/api";
 import { db } from "@/lib/env";
 import { photos, sets } from "@/db/schema";
 import { newId } from "@/lib/crypto";
@@ -38,13 +38,11 @@ function keyBelongs(key: string | null, projectId: string): boolean {
 
 /** Registers uploaded photos (after their files are in R2) and pairs RAW files with their JPEGs by name. */
 export async function POST(request: Request): Promise<Response> {
-  const denied = await adminGuard();
-  if (denied) return denied;
   const body = (await request.json()) as RegisterPhoto | AttachRaw;
   const d = db();
-
-  const project = await d.query.projects.findFirst({ where: (p, { eq }) => eq(p.id, body.projectId) });
-  if (!project) return fail("No such project", 404);
+  const access = await studioProject(String(body.projectId ?? ""));
+  if ("denied" in access) return access.denied;
+  const { project } = access;
   if (body.setId) {
     const set = await d.query.sets.findFirst({ where: and(eq(sets.id, body.setId), eq(sets.projectId, project.id)) });
     if (!set) return fail("No such set");

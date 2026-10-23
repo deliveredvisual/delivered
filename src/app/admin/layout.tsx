@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth";
-import { studio } from "@/lib/env";
+import { isSiteOwner, requireStudio } from "@/lib/auth";
 import { logout } from "../login/actions";
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
-  await requireAdmin();
-  const { name } = studio();
+  const { studio, user } = await requireStudio();
+  const siteOwner = await isSiteOwner();
+  const active = studio.status === "active";
   return (
     <>
       <header className="topbar" style={{ paddingTop: 16, paddingBottom: 16 }}>
@@ -15,11 +15,13 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
           </Link>
           <nav className="nav" aria-label="Main">
             <Link href="/admin">Projects</Link>
-            <Link href="/admin/new">New project</Link>
+            {active ? <Link href="/admin/new">New project</Link> : null}
+            <Link href="/admin/team">Team</Link>
+            {siteOwner ? <Link href="/admin/studios">Studios</Link> : null}
           </nav>
         </div>
         <div className="row small">
-          <span className="muted">{name}</span>
+          <span className="muted">{user && user.name !== studio.name ? `${user.name} · ${studio.name}` : studio.name}</span>
           <form action={logout}>
             <button type="submit" className="btn btn-small">Sign out</button>
           </form>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { requireProject } from "@/lib/auth";
 import { describeEvent, getProjectFull, picksFor, recentEvents } from "@/lib/queries";
 import { daysLeft, formatBytes, formatDate, formatTimecode, plural, timeAgo } from "@/lib/format";
 import { fileUrl } from "@/lib/urls";
@@ -30,6 +31,7 @@ export const metadata: Metadata = { title: "Project" };
 
 export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[id]">) {
   const { id } = await params;
+  await requireProject(id);
   const full = await getProjectFull(id);
   if (!full) notFound();
   const { project: p, sets, photos, films } = full;

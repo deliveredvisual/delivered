@@ -14,8 +14,3 @@ export function db() {
 export function bucket(): R2Bucket {
   return env().FILES;
 }
-
-export function studio() {
-  const e = env();
-  return { name: e.STUDIO_NAME || "Studio", email: e.STUDIO_EMAIL || "" };
-}

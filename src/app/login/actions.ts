@@ -1,15 +1,21 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { loginAdmin, logoutAdmin } from "@/lib/auth";
+import { currentStudio, signIn, signOut } from "@/lib/auth";
+import { safeNext } from "@/lib/next-url";
 
-export async function login(_prev: { error: string }, form: FormData): Promise<{ error: string }> {
-  const ok = await loginAdmin(String(form.get("password") ?? ""));
-  if (!ok) return { error: "That password isn't right." };
-  redirect("/admin");
+export type LoginState = { error: string; email?: string };
+
+export async function login(_prev: LoginState, form: FormData): Promise<LoginState> {
+  const email = String(form.get("email") ?? "").slice(0, 200);
+  const r = await signIn(email, String(form.get("password") ?? ""));
+  if (!r.ok) return { error: r.error, email };
+  const next = safeNext(form.get("next"));
+  if (next) redirect(next);
+  redirect((await currentStudio()) ? "/admin" : "/me");
 }
 
 export async function logout(): Promise<void> {
-  await logoutAdmin();
+  await signOut();
   redirect("/login");
 }

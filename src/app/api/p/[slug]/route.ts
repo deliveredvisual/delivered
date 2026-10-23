@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { fail, json } from "@/lib/api";
-import { getViewer, isAdmin, projectForViewer, setViewer } from "@/lib/auth";
-import { db, studio } from "@/lib/env";
+import { getViewer, managesProject, projectForViewer, setViewer, studioFor } from "@/lib/auth";
+import { db } from "@/lib/env";
 import { newId } from "@/lib/crypto";
 import { logEvent } from "@/lib/queries";
 import { formatTimecode } from "@/lib/format";
@@ -30,8 +30,8 @@ export async function POST(request: Request, ctx: RouteContext<"/api/p/[slug]">)
     return json({ ok: true, viewer: name });
   }
 
-  const viewer = await getViewer();
-  const admin = await isAdmin();
+  const viewer = await getViewer(project);
+  const admin = await managesProject(project);
   if (!viewer) return fail("Name needed", 428);
 
   switch (body.op) {
@@ -64,7 +64,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/p/[slug]">)
         id: newId(),
         versionId: version.v.id,
         author: viewer,
-        org: admin ? studio().name : String(body.org ?? "").trim().slice(0, 60),
+        org: admin ? (await studioFor(project)).name : String(body.org ?? "").trim().slice(0, 60),
         timecode: Math.max(0, Math.round(Number(body.timecode) || 0)),
         body: text,
         resolved: false,

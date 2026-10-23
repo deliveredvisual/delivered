@@ -17,6 +17,16 @@ Runs entirely on Cloudflare: the app on Workers, the database on D1, files on R2
 - Films with versions (v1, v2…), comments pinned to a timecode, resolve, approve
 - NDA mode: confidential notice, right-click saving disabled
 
+**Accounts** (`/signup`, `/login`)
+- **Creatives** (photographers, filmmakers…) sign up and get their own studio. New studios wait for approval at
+  `/admin/studios` (only the main studio's owner sees this), so nobody uploads to your storage without your say-so.
+- **Team members** join a studio from an invite link the owner makes on `/admin/team` (one use, 14 days).
+- **Clients** sign up freely. Any delivery they open while signed in is saved to `/me`, their home page; a password-
+  protected delivery they've unlocked once doesn't ask again. Plain links keep working without an account.
+- Each studio sees only its own projects, uploads and files.
+- The original `ADMIN_PASSWORD` still signs you into the main studio as a backup.
+- Not built yet: email verification and "forgot password" (both need an email-sending service).
+
 **For you** (`/admin`)
 - Projects list with time left, invoice status and latest client activity
 - Drag-and-drop upload of JPEGs and RAWs; RAWs pair with their JPEG by file name
@@ -45,8 +55,7 @@ You'll do these once in the Cloudflare dashboard.
 
 Every push to `main` then deploys automatically. Sign in at `https://deliveredvisual.com/login`.
 
-To change the studio name or contact email shown to clients, edit `STUDIO_NAME` and `STUDIO_EMAIL` in
-`wrangler.jsonc`.
+To change the studio name or contact email shown to clients, sign in and go to **Team**.
 
 ## Running it locally
 
@@ -63,7 +72,8 @@ npm run preview                     # the production build in the Workers runtim
 | Part | Where |
 | --- | --- |
 | Database schema | `src/db/schema.ts`, migrations in `drizzle/` (`npm run db:generate` after schema changes) |
-| Sign-in, client access, payment hold | `src/lib/auth.ts` |
+| Accounts, studios, sign-in, client access, payment hold | `src/lib/auth.ts` |
+| Sign-up, sign-in, client home, team, studio approval | `src/app/signup/`, `src/app/login/`, `src/app/me/`, `src/app/admin/team/`, `src/app/admin/studios/` |
 | File serving with access checks and video seeking | `src/app/api/file/route.ts` |
 | Chunked uploads into R2 | `src/app/api/admin/upload/route.ts`, browser side in `src/lib/upload-client.ts` |
 | Browser-side ZIPs and social crops | `src/lib/zip-client.ts` |

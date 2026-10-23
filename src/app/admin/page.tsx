@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { listProjects, describeEvent, type ProjectSummary } from "@/lib/queries";
+import { requireStudio } from "@/lib/auth";
 import { daysLeft, formatBytes, formatDate, plural, timeAgo } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Projects" };
@@ -23,7 +24,18 @@ function status(p: ProjectSummary): "live" | "soon" | "archived" {
 export default async function ProjectsPage({ searchParams }: PageProps<"/admin">) {
   const sp = await searchParams;
   const filter = (FILTERS.find((f) => f.id === sp.f)?.id ?? "live") as Filter;
-  const all = await listProjects();
+  const { studio } = await requireStudio();
+  if (studio.status !== "active") {
+    return (
+      <main className="wrap stack" style={{ paddingTop: 48, gap: 20, maxWidth: 640 }}>
+        <h1 className="h2" style={{ fontSize: 40 }}>Welcome to Delivered Visual</h1>
+        <div className="notice">
+          Your studio, <strong>{studio.name}</strong>, is waiting for approval. You&rsquo;ll be able to create deliveries as soon as it&rsquo;s switched on.
+        </div>
+      </main>
+    );
+  }
+  const all = await listProjects(studio.id);
   const counts = {
     live: all.filter((p) => status(p) === "live").length,
     soon: all.filter((p) => status(p) === "soon").length,
