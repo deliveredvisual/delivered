@@ -8,9 +8,9 @@ import { ClientTopbar } from "../../client-chrome";
 import { ClientShell } from "../../client-shell";
 import { Review } from "./review";
 
-export const metadata: Metadata = { title: "Film review" };
+export const metadata: Metadata = { title: "Video review" };
 
-export default async function FilmPage({ params, searchParams }: PageProps<"/p/[slug]/film/[filmId]">) {
+export default async function FilmPage({ params, searchParams }: PageProps<"/p/[slug]/video/[filmId]">) {
   const { slug, filmId } = await params;
   const sp = await searchParams;
   const project = await projectForViewer(slug);

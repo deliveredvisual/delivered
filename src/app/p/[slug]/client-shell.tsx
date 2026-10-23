@@ -56,7 +56,7 @@ function PinChip({ slug, p, newTab, onRemove }: { slug: string; p: PinView; newT
           // eslint-disable-next-line @next/next/no-img-element
           <img src={fileUrl(p.thumbKey)} alt="" loading="lazy" />
         ) : (
-          <span className="mono" style={{ fontSize: 10 }}>{p.type === "film" ? "FILM" : "PHOTO"}</span>
+          <span className="mono" style={{ fontSize: 10 }}>{p.type === "film" ? "VIDEO" : "PHOTO"}</span>
         )}
         {p.type === "film" ? <span className="pin-play" aria-hidden="true">▶</span> : null}
       </span>
@@ -249,7 +249,7 @@ export function ClientShell({
               <p className="small muted" style={{ margin: 0 }}>
                 {isStudio
                   ? "No messages yet. Anything you write here is seen by everyone with the link."
-                  : "Ask a question or leave a note for the studio. Pin photos or a moment in a film so everyone knows exactly what you mean."}
+                  : "Ask a question or leave a note for the studio. Pin photos or a moment in a video so everyone knows exactly what you mean."}
               </p>
             ) : null}
             {msgs?.map((m) => (
@@ -286,7 +286,7 @@ export function ClientShell({
               </div>
             ) : (
               <p className="small muted" style={{ margin: 0 }}>
-                <PinIcon /> {isStudio ? "To pin photos or films, open the delivery as a client and use Pin." : "Use Pin on any photo or film to attach it."}
+                <PinIcon /> {isStudio ? "To pin photos or videos, open the delivery as a client and use Pin." : "Use Pin on any photo or video to attach it."}
               </p>
             )}
             <label htmlFor="chat-box" className="sr-only">Message</label>

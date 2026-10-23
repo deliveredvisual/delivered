@@ -151,12 +151,12 @@ export function Landing(props: {
       ) : null}
 
       {films.length ? (
-        <section className="landing-band" aria-label="Films">
-          <div className="eyebrow" style={{ marginBottom: 16 }}>Films</div>
+        <section className="landing-band" aria-label="Videos">
+          <div className="eyebrow" style={{ marginBottom: 16 }}>Videos</div>
           <div className={`landing-films${films.length === 1 ? " one" : ""}`}>
             {films.map((f) => (
               <div key={f.id} className="landing-film">
-                <Link href={`/p/${slug}/film/${f.id}`} className="landing-film-media" aria-label={`Watch ${f.title}`}>
+                <Link href={`/p/${slug}/video/${f.id}`} className="landing-film-media" aria-label={`Watch ${f.title}`}>
                   {f.posterKey ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={fileUrl(f.posterKey)} alt="" loading="lazy" {...noSave} />
@@ -167,7 +167,7 @@ export function Landing(props: {
                 </Link>
                 <div className="row between" style={{ alignItems: "baseline" }}>
                   <div className="stack" style={{ gap: 2 }}>
-                    <Link href={`/p/${slug}/film/${f.id}`} style={{ textDecoration: "none", fontSize: 17, fontWeight: 500 }}>{f.title}</Link>
+                    <Link href={`/p/${slug}/video/${f.id}`} style={{ textDecoration: "none", fontSize: 17, fontWeight: 500 }}>{f.title}</Link>
                     <span className="small muted">
                       {f.aspect}{f.duration ? ` · ${formatTimecode(f.duration)}` : ""} · v{f.version}{f.approved ? " · Approved" : ""}
                     </span>

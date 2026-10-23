@@ -40,7 +40,7 @@ export const metadata: Metadata = { title: "Project" };
 
 const TABS = [
   { id: "photos", label: "Photos" },
-  { id: "films", label: "Films" },
+  { id: "films", label: "Videos" },
   { id: "clients", label: "Clients" },
   { id: "landing", label: "Landing page" },
   { id: "history", label: "History" },
@@ -100,7 +100,7 @@ export default async function ProjectAdminPage({ params, searchParams }: PagePro
         <h1 className="h1">{p.title}</h1>
         <div className="meta">
           {p.shotDate ? <span>Shot {formatDate(p.shotDate)}</span> : null}
-          <span>{plural(photos.length, "photo")} · {plural(films.length, "film")} · {formatBytes(photoBytes + films.reduce((sum, f) => sum + f.versions.reduce((a, v) => a + v.size, 0), 0))}</span>
+          <span>{plural(photos.length, "photo")} · {plural(films.length, "video")} · {formatBytes(photoBytes + films.reduce((sum, f) => sum + f.versions.reduce((a, v) => a + v.size, 0), 0))}</span>
           <span className={expired || left <= 30 ? "warn" : ""}>
             {expired ? "Archived: clients can't open it" : `Live until ${formatDate(p.expiresAt)} (${plural(left, "day")})`}
           </span>
@@ -179,7 +179,7 @@ export default async function ProjectAdminPage({ params, searchParams }: PagePro
 
       {tab === "films" ? (
         <section className="stack" style={{ gap: 20 }}>
-          {films.length === 0 ? <p className="muted small" style={{ margin: 0 }}>No films yet. Add one below, then upload the file. Each new upload becomes the next version (v1, v2…).</p> : null}
+          {films.length === 0 ? <p className="muted small" style={{ margin: 0 }}>No videos yet. Add one below, then upload the file. Each new upload becomes the next version (v1, v2…).</p> : null}
           {films.map((f) => (
             <div key={f.id} className="panel stack">
               <div className="film-head">
@@ -199,7 +199,7 @@ export default async function ProjectAdminPage({ params, searchParams }: PagePro
                     {f.openComments ? ` · ${plural(f.openComments, "open comment")}` : ""}
                   </span>
                   <div className="row" style={{ marginTop: 6 }}>
-                    {f.current ? <a className="btn btn-small" href={`/p/${p.slug}/film/${f.id}`} target="_blank" rel="noreferrer">Review</a> : null}
+                    {f.current ? <a className="btn btn-small" href={`/p/${p.slug}/video/${f.id}`} target="_blank" rel="noreferrer">Review</a> : null}
                     <FilmUploader projectId={p.id} filmId={f.id} nextVersion={(f.versions.at(-1)?.version ?? 0) + 1} />
                   </div>
                 </div>
@@ -220,12 +220,12 @@ export default async function ProjectAdminPage({ params, searchParams }: PagePro
                 </div>
               ) : null}
               <form action={deleteFilm.bind(null, p.id, f.id)}>
-                <ConfirmButton message={`Delete "${f.title}", every version and all comments?`}>Delete film</ConfirmButton>
+                <ConfirmButton message={`Delete "${f.title}", every version and all comments?`}>Delete video</ConfirmButton>
               </form>
             </div>
           ))}
           <form action={addFilm.bind(null, p.id)} className="panel add-film">
-            <input name="title" className="input" placeholder="Film title, e.g. Launch film" aria-label="Film title" required />
+            <input name="title" className="input" placeholder="Video title, e.g. Launch video" aria-label="Video title" required />
             <select name="aspect" className="select" aria-label="Aspect ratio">
               <option>16:9</option>
               <option>9:16</option>
@@ -233,7 +233,7 @@ export default async function ProjectAdminPage({ params, searchParams }: PagePro
               <option>1:1</option>
               <option>2.39:1</option>
             </select>
-            <button type="submit" className="btn">Add film</button>
+            <button type="submit" className="btn">Add video</button>
           </form>
         </section>
       ) : null}

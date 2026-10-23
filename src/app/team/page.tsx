@@ -61,7 +61,7 @@ export default async function TeamPage() {
                   {org.creative ? (org.status === "active" ? "On" : "Waiting for approval") : "Off"}
                 </span>
               </div>
-              <p className="small muted" style={{ margin: 0 }}>Make deliveries and send them to clients: upload photos and films, landing pages, chat, client folders.</p>
+              <p className="small muted" style={{ margin: 0 }}>Make deliveries and send them to clients: upload photos and videos, landing pages, chat, client folders.</p>
               {!org.creative && owner ? (
                 <form action={activateSide.bind(null, "creative")}>
                   <button type="submit" className="btn btn-small">Turn on</button>

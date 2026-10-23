@@ -285,7 +285,7 @@ export function Gallery(props: GalleryProps) {
           {project.shot ? <span>Shot {project.shot}</span> : null}
           <span>
             {plural(photos.length, "photo")}
-            {films.length ? ` · ${plural(films.length, "film")}` : ""}
+            {films.length ? ` · ${plural(films.length, "video")}` : ""}
           </span>
           <span>Live until {project.liveUntil}</span>
         </div>
@@ -312,10 +312,10 @@ export function Gallery(props: GalleryProps) {
 
       {films.length ? (
         <section style={{ paddingTop: 40 }}>
-          <div className="eyebrow" style={{ marginBottom: 16 }}>Films</div>
+          <div className="eyebrow" style={{ marginBottom: 16 }}>Videos</div>
           <div className="film-cards">
             {films.map((f) => (
-              <Link key={f.id} href={`/p/${slug}/film/${f.id}`} className="film-card">
+              <Link key={f.id} href={`/p/${slug}/video/${f.id}`} className="film-card">
                 <div className="film-thumb">
                   {f.posterKey ? (
                     // eslint-disable-next-line @next/next/no-img-element

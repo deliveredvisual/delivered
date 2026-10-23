@@ -219,9 +219,9 @@ export function describeEvent(e: { viewer: string; action: string; detail: strin
     case "set_delete":
       return `${who} deleted the folder ${d}`;
     case "film_add":
-      return `${who} added the film ${d}`;
+      return `${who} added the video ${d}`;
     case "film_delete":
-      return `${who} deleted the film ${d}`;
+      return `${who} deleted the video ${d}`;
     case "version":
       return `${who} uploaded ${d}`;
     case "version_delete":

@@ -23,5 +23,5 @@ export function pinHref(slug: string, p: PinView): string {
   if (p.versionId) q.set("v", p.versionId);
   if (p.timecode !== undefined) q.set("t", String(p.timecode));
   const qs = q.toString();
-  return `/p/${slug}/film/${p.id}${qs ? `?${qs}` : ""}`;
+  return `/p/${slug}/video/${p.id}${qs ? `?${qs}` : ""}`;
 }

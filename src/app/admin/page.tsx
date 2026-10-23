@@ -87,7 +87,7 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/admin">
                 const p = r.project;
                 const st = status(r);
                 const left = daysLeft(p.expiresAt);
-                const files = [r.photoCount ? plural(Number(r.photoCount), "photo") : "", r.filmCount ? plural(Number(r.filmCount), "film") : ""]
+                const files = [r.photoCount ? plural(Number(r.photoCount), "photo") : "", r.filmCount ? plural(Number(r.filmCount), "video") : ""]
                   .filter(Boolean)
                   .join(" · ");
                 return (

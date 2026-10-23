@@ -180,7 +180,7 @@ export function LandingForm({
 
       <div className="field">
         <label htmlFor="landing-intro" className="h3" style={{ marginBottom: 4 }}>Note to your client</label>
-        <textarea id="landing-intro" name="intro" className="textarea" rows={3} defaultValue={settings.intro} maxLength={2000} placeholder="e.g. Thanks for a great day at Fuji. Here are the finals from the launch shoot. Films are at the top." />
+        <textarea id="landing-intro" name="intro" className="textarea" rows={3} defaultValue={settings.intro} maxLength={2000} placeholder="e.g. Thanks for a great day at Fuji. Here are the finals from the launch shoot. Videos are at the top." />
         <span className="small muted">Shown under the title. Leave empty for none.</span>
       </div>
 

@@ -42,7 +42,7 @@ export default async function LandingPage({ params }: PageProps<"/p/[slug]">) {
             intro: p.landingIntro,
             meta: [
               p.shotDate ? `Shot ${formatDate(p.shotDate)}` : "",
-              [photos.length ? plural(photos.length, "photo") : "", films.length ? plural(films.length, "film") : ""].filter(Boolean).join(" · "),
+              [photos.length ? plural(photos.length, "photo") : "", films.length ? plural(films.length, "video") : ""].filter(Boolean).join(" · "),
               `Live until ${formatDate(p.expiresAt)}`,
             ].filter(Boolean),
             credit: p.licenceCredit,

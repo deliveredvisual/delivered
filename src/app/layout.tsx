@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: { default: "Delivered Visual", template: "%s · Delivered Visual" },
-  description: "Private photo and film delivery for clients.",
+  description: "Private photo and video delivery for clients.",
   robots: { index: false, follow: false }, // client deliveries are private
 };
 
