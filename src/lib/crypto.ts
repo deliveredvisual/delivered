@@ -10,8 +10,8 @@ function toHex(buf: ArrayBuffer): string {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function fromHex(hex: string): Uint8Array {
-  const out = new Uint8Array(hex.length / 2);
+function fromHex(hex: string): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(new ArrayBuffer(hex.length / 2));
   for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   return out;
 }
@@ -71,7 +71,7 @@ export async function checkPassword(password: string, stored: string): Promise<b
   return timingSafeEqual(candidate, hash);
 }
 
-async function pbkdf2(password: string, salt: Uint8Array): Promise<string> {
+async function pbkdf2(password: string, salt: Uint8Array<ArrayBuffer>): Promise<string> {
   const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
     { name: "PBKDF2", salt, iterations: 100_000, hash: "SHA-256" },
