@@ -41,7 +41,6 @@ export type GalleryProps = {
     shot: string;
     liveUntil: string;
     nda: boolean;
-    held: boolean;
     rawEnabled: boolean;
     licence: { usage: string; territory: string; term: string; credit: string; terms: string };
   };
@@ -153,7 +152,6 @@ export function Gallery(props: GalleryProps) {
       id: "full",
       label: "Full resolution",
       detail: `${entriesFor("full").length} files · ${formatBytes(entriesFor("full").reduce((s, e) => s + e.size, 0))}`,
-      disabled: project.held ? "Available once the invoice is settled" : undefined,
     },
     { id: "web", label: "Web", detail: `JPEG, 2560px long edge · ${entriesFor("web").length} files` },
     { id: "social", label: "Social crops", detail: `4:5 and 9:16, 1080px wide · ${entriesFor("web").length} of each` },
@@ -164,7 +162,6 @@ export function Gallery(props: GalleryProps) {
       id: "raw",
       label: "RAW originals",
       detail: `Camera files · ${raws.length} files · ${formatBytes(raws.reduce((s, e) => s + e.size, 0))}`,
-      disabled: project.held ? "Available once the invoice is settled" : undefined,
     });
   }
 
@@ -397,7 +394,7 @@ export function Gallery(props: GalleryProps) {
               {current.previewKey ? (
                 <a className="lb-btn" href={fileUrl(current.previewKey, baseName(current.filename) + "_web.jpg")}>Web</a>
               ) : null}
-              {current.originalKey && !project.held ? (
+              {current.originalKey ? (
                 <a className="lb-btn" href={fileUrl(current.originalKey, current.filename)}>Full res</a>
               ) : null}
               <button type="button" className="lb-btn" onClick={() => setOpen(null)} aria-label="Close">

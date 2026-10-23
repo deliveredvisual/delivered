@@ -336,8 +336,3 @@ export async function setViewer(name: string): Promise<void> {
   const clean = name.trim().slice(0, 60);
   (await cookies()).set(VIEWER_COOKIE, clean, { ...cookieBase, httpOnly: false, maxAge: 365 * 24 * 60 * 60 });
 }
-
-/** Full-resolution and RAW downloads are held when you've ticked "hold until paid" and the invoice is open. */
-export function fullResHeld(project: Project): boolean {
-  return project.holdUntilPaid && !project.invoicePaid;
-}

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
-import { fullResHeld, getViewer, managesProject, projectForViewer, studioFor } from "@/lib/auth";
+import { getViewer, projectForViewer, studioFor } from "@/lib/auth";
 import { db } from "@/lib/env";
 import { comments, filmVersions, films } from "@/db/schema";
 import { ClientTopbar } from "../../client-chrome";
@@ -23,7 +23,7 @@ export default async function FilmPage({ params }: PageProps<"/p/[slug]/film/[fi
     .from(comments)
     .where(inArray(comments.versionId, versions.map((v) => v.id)))
     .orderBy(asc(comments.timecode), asc(comments.createdAt));
-  const [viewer, admin, studio] = await Promise.all([getViewer(project), managesProject(project), studioFor(project)]);
+  const [viewer, studio] = await Promise.all([getViewer(project), studioFor(project)]);
 
   return (
     <>
@@ -32,7 +32,6 @@ export default async function FilmPage({ params }: PageProps<"/p/[slug]/film/[fi
         slug={slug}
         projectTitle={project.title}
         viewer={viewer}
-        canDownload={!fullResHeld(project) || admin}
         film={{ id: film.id, title: film.title, aspect: film.aspect }}
         versions={versions.map((v) => ({
           id: v.id,

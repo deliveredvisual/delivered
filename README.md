@@ -12,7 +12,6 @@ Runs entirely on Cloudflare: the app on Workers, the database on D1, files on R2
 - Photos grouped into sets, lightbox with keyboard controls (← → P Esc)
 - Personal selects for every person on the client side, plus a "Team selects" view
 - Downloads as ZIP: full resolution, web (2560px), social crops (4:5 and 9:16), RAW originals
-- Full-resolution and RAW held until the invoice is paid, if you choose
 - Usage licence shown on every delivery
 - Films with versions (v1, v2…), comments pinned to a timecode, resolve, approve
 - NDA mode: confidential notice, right-click saving disabled
@@ -28,7 +27,7 @@ Runs entirely on Cloudflare: the app on Workers, the database on D1, files on R2
 - Not built yet: email verification and "forgot password" (both need an email-sending service).
 
 **For you** (`/admin`)
-- Projects list with time left, invoice status and latest client activity
+- Projects list with time left and latest client activity
 - Drag-and-drop upload of JPEGs and RAWs; RAWs pair with their JPEG by file name
 - Files of any size: uploads go up in 32 MB chunks; previews and thumbnails are made in your browser
 - Move photos between sets, see what each client picked, full activity log
@@ -72,7 +71,7 @@ npm run preview                     # the production build in the Workers runtim
 | Part | Where |
 | --- | --- |
 | Database schema | `src/db/schema.ts`, migrations in `drizzle/` (`npm run db:generate` after schema changes) |
-| Accounts, studios, sign-in, client access, payment hold | `src/lib/auth.ts` |
+| Accounts, studios, sign-in, client access | `src/lib/auth.ts` |
 | Sign-up, sign-in, client home, team, studio approval | `src/app/signup/`, `src/app/login/`, `src/app/me/`, `src/app/admin/team/`, `src/app/admin/studios/` |
 | File serving with access checks and video seeking | `src/app/api/file/route.ts` |
 | Chunked uploads into R2 | `src/app/api/admin/upload/route.ts`, browser side in `src/lib/upload-client.ts` |

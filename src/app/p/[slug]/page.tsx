@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { fullResHeld, getProjectBySlug, getViewer, hasProjectAccess, isExpired, managesProject, saveDelivery, studioFor } from "@/lib/auth";
+import { getProjectBySlug, getViewer, hasProjectAccess, isExpired, managesProject, saveDelivery, studioFor } from "@/lib/auth";
 import { getProjectFull, logView, picksFor } from "@/lib/queries";
 import { formatDate } from "@/lib/format";
 import { CenteredCard, ClientTopbar } from "./client-chrome";
@@ -61,7 +61,6 @@ export default async function DeliveryPage({ params }: PageProps<"/p/[slug]">) {
           shot: formatDate(project.shotDate),
           liveUntil: formatDate(project.expiresAt),
           nda: project.nda,
-          held: fullResHeld(project) && !admin,
           rawEnabled: project.rawEnabled,
           licence: {
             usage: project.licenceUsage,

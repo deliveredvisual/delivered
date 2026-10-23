@@ -32,7 +32,6 @@ export function Review(props: {
   slug: string;
   projectTitle: string;
   viewer: string;
-  canDownload: boolean;
   film: { id: string; title: string; aspect: string };
   versions: Version[];
   comments: CommentRow[];
@@ -96,6 +95,13 @@ export function Review(props: {
     const res = await api(slug, { op: "approve", versionId });
     if (res.ok) {
       setVersions((prev) => prev.map((x) => (x.id === versionId ? { ...x, approvedBy: viewerRef.current, approvedAt: new Date().toISOString() } : x)));
+    }
+  }
+
+  async function undoApprove() {
+    const res = await api(slug, { op: "unapprove", versionId });
+    if (res.ok) {
+      setVersions((prev) => prev.map((x) => (x.id === versionId ? { ...x, approvedBy: null, approvedAt: null } : x)));
     }
   }
 
@@ -165,21 +171,22 @@ export function Review(props: {
           </div>
           <div className="row">
             {v.approvedAt ? (
-              <span className="good small" style={{ fontWeight: 600 }}>
-                Approved by {v.approvedBy}
-              </span>
+              <>
+                <span className="good small" style={{ fontWeight: 600 }}>
+                  Approved by {v.approvedBy}
+                </span>
+                <button type="button" className="btn btn-small" onClick={() => needName(undoApprove)}>
+                  Undo approval
+                </button>
+              </>
             ) : (
               <button type="button" className="btn btn-primary" onClick={() => needName(approve)}>
                 Approve v{v.version}
               </button>
             )}
-            {props.canDownload ? (
-              <a className="btn" href={fileUrl(v.fileKey, `${props.projectTitle} - ${film.title} v${v.version}.${v.filename.split(".").pop() ?? "mp4"}`)}>
-                Download v{v.version}
-              </a>
-            ) : (
-              <span className="small muted">Downloads open once the invoice is settled.</span>
-            )}
+            <a className="btn" href={fileUrl(v.fileKey, `${props.projectTitle} - ${film.title} v${v.version}.${v.filename.split(".").pop() ?? "mp4"}`)}>
+              Download v{v.version}
+            </a>
           </div>
         </div>
 

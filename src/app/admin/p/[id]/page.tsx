@@ -17,7 +17,6 @@ import {
   newLink,
   renameSet,
   setArchived,
-  setInvoicePaid,
   updateProject,
 } from "../../actions";
 import { ProjectForm } from "../../project-form";
@@ -79,12 +78,6 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
         <CopyLink url={link} />
         <div className="row">
           <a className="btn btn-small" href={`/p/${p.slug}`} target="_blank" rel="noreferrer">Open as client</a>
-          <form action={setInvoicePaid.bind(null, p.id, !p.invoicePaid)}>
-            <button type="submit" className="btn btn-small">{p.invoicePaid ? "Mark invoice unpaid" : "Mark invoice paid"}</button>
-          </form>
-          <span className={`small ${p.invoicePaid ? "good" : "warn"}`}>
-            {p.invoicePaid ? "Invoice paid" : p.holdUntilPaid ? "Unpaid · full-res and RAW held" : "Unpaid"}
-          </span>
         </div>
       </section>
 

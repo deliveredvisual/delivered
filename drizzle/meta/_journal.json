@@ -15,6 +15,13 @@
       "when": 1792726235006,
       "tag": "0001_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792727484419,
+      "tag": "0002_remove_invoicing",
+      "breakpoints": true
     }
   ]
 }

@@ -79,7 +79,6 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/admin">
                 <th scope="col">Shot</th>
                 <th scope="col">Files</th>
                 <th scope="col">Live for</th>
-                <th scope="col">Invoice</th>
                 <th scope="col">Latest activity</th>
               </tr>
             </thead>
@@ -107,9 +106,6 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/admin">
                     </td>
                     <td style={{ whiteSpace: "nowrap" }} className={st === "soon" ? "warn" : st === "archived" ? "muted" : ""}>
                       {st === "archived" ? "Archived" : plural(left, "day")}
-                    </td>
-                    <td style={{ whiteSpace: "nowrap" }} className={p.invoicePaid ? "good" : "warn"}>
-                      {p.invoicePaid ? "Paid" : p.holdUntilPaid ? "Unpaid · full-res held" : "Unpaid"}
                     </td>
                     <td className="small" style={{ color: "var(--ink-2)" }}>
                       {r.latest ? (

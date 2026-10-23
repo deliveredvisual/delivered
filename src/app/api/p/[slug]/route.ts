@@ -13,7 +13,8 @@ type Body =
   | { op: "event"; action: "download" | "view_film"; detail: string }
   | { op: "comment"; versionId: string; timecode: number; body: string; org?: string }
   | { op: "resolve"; commentId: string; resolved: boolean }
-  | { op: "approve"; versionId: string };
+  | { op: "approve"; versionId: string }
+  | { op: "unapprove"; versionId: string };
 
 /** Everything a client can do on a delivery: set their name, pick photos, comment on and approve films. */
 export async function POST(request: Request, ctx: RouteContext<"/api/p/[slug]">): Promise<Response> {
@@ -85,6 +86,13 @@ export async function POST(request: Request, ctx: RouteContext<"/api/p/[slug]">)
       if (!version) return fail("No such version", 404);
       await d.update(filmVersions).set({ approvedAt: new Date(), approvedBy: viewer }).where(eq(filmVersions.id, version.v.id));
       if (!admin) await logEvent(project.id, viewer, "approve", `${version.f.title} v${version.v.version}`);
+      return json({ ok: true });
+    }
+    case "unapprove": {
+      const version = await versionInProject(body.versionId, project.id);
+      if (!version) return fail("No such version", 404);
+      await d.update(filmVersions).set({ approvedAt: null, approvedBy: null }).where(eq(filmVersions.id, version.v.id));
+      if (!admin) await logEvent(project.id, viewer, "unapprove", `${version.f.title} v${version.v.version}`);
       return json({ ok: true });
     }
     default:

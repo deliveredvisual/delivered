@@ -26,8 +26,6 @@ function projectFields(form: FormData) {
     shotDate: str(form, "shotDate", 10) || null,
     nda: bool(form, "nda"),
     rawEnabled: bool(form, "rawEnabled"),
-    holdUntilPaid: bool(form, "holdUntilPaid"),
-    invoicePaid: bool(form, "invoicePaid"),
     licenceUsage: str(form, "licenceUsage", 140),
     licenceTerritory: str(form, "licenceTerritory", 140),
     licenceTerm: str(form, "licenceTerm", 140),
@@ -81,13 +79,6 @@ export async function updateProject(projectId: string, _prev: FormState, form: F
   revalidatePath(`/admin/p/${projectId}`);
   revalidatePath("/admin");
   return { error: "" };
-}
-
-export async function setInvoicePaid(projectId: string, paid: boolean) {
-  await requireProject(projectId);
-  await db().update(projects).set({ invoicePaid: paid }).where(eq(projects.id, projectId));
-  revalidatePath(`/admin/p/${projectId}`);
-  revalidatePath("/admin");
 }
 
 export async function setArchived(projectId: string, archived: boolean) {

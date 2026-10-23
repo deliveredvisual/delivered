@@ -65,18 +65,6 @@ export function ProjectForm({ action, project, submitLabel }: Props) {
       </section>
 
       <section className="stack">
-        <h2 className="h3">Invoice</h2>
-        <label className="check">
-          <input type="checkbox" name="invoicePaid" defaultChecked={p?.invoicePaid} />
-          <span>Invoice paid</span>
-        </label>
-        <label className="check">
-          <input type="checkbox" name="holdUntilPaid" defaultChecked={p?.holdUntilPaid} />
-          <span>Hold full-resolution and RAW downloads until the invoice is paid (web-size stays available)</span>
-        </label>
-      </section>
-
-      <section className="stack">
         <h2 className="h3">Usage licence</h2>
         <div className="grid-form">
           <div className="field">

@@ -113,6 +113,8 @@ export function describeEvent(e: { viewer: string; action: string; detail: strin
       return `${who} commented on ${e.detail}`;
     case "approve":
       return `${who} approved ${e.detail}`;
+    case "unapprove":
+      return `${who} undid their approval of ${e.detail}`;
     default:
       return `${who}: ${e.action} ${e.detail}`.trim();
   }

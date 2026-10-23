@@ -89,8 +89,6 @@ export const projects = sqliteTable(
     archived: integer("archived", { mode: "boolean" }).notNull().default(false),
     passwordHash: text("password_hash"), // null = link alone opens it
     nda: integer("nda", { mode: "boolean" }).notNull().default(false),
-    invoicePaid: integer("invoice_paid", { mode: "boolean" }).notNull().default(false),
-    holdUntilPaid: integer("hold_until_paid", { mode: "boolean" }).notNull().default(false),
     rawEnabled: integer("raw_enabled", { mode: "boolean" }).notNull().default(false),
     licenceUsage: text("licence_usage").notNull().default(""),
     licenceTerritory: text("licence_territory").notNull().default(""),
