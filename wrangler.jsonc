@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "delivered-visual",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": { "enabled": true },
+  // Database: create with `npx wrangler d1 create delivered-visual`, then paste the id here.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "delivered-visual",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  // File storage: create with `npx wrangler r2 bucket create delivered-visual-files`.
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "delivered-visual-files"
+    }
+  ],
+  "vars": {
+    "STUDIO_NAME": "Alec Pender",
+    "STUDIO_EMAIL": "hello@alecpender.com"
+  }
+  // Secrets (set with `npx wrangler secret put NAME`): ADMIN_PASSWORD, SESSION_SECRET
+}
