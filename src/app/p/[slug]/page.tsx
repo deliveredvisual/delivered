@@ -1,101 +1,67 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getProjectBySlug, getViewer, hasProjectAccess, isExpired, managesProject, saveDelivery, studioFor } from "@/lib/auth";
-import { getProjectFull, logView, picksFor } from "@/lib/queries";
-import { formatDate } from "@/lib/format";
-import { CenteredCard, ClientTopbar } from "./client-chrome";
-import { UnlockForm } from "./unlock-form";
-import { Gallery } from "./gallery";
+import { getProjectFull, logView } from "@/lib/queries";
+import { formatDate, plural } from "@/lib/format";
+import { isDarkBg, landingTheme, LANDING_SPACING } from "@/lib/landing";
+import { ClientTopbar } from "./client-chrome";
+import { ClientShell } from "./client-shell";
+import { openDelivery } from "./gate";
+import { Landing } from "./landing";
 
 export const metadata: Metadata = { title: "Delivery" };
 
-export default async function DeliveryPage({ params }: PageProps<"/p/[slug]">) {
+/** What a client sees first: the cover, a note from the studio, films, then every photo laid out beautifully. */
+export default async function LandingPage({ params }: PageProps<"/p/[slug]">) {
   const { slug } = await params;
-  const project = await getProjectBySlug(slug);
-  if (!project) notFound();
-  const [admin, studio] = await Promise.all([managesProject(project), studioFor(project)]);
+  const opened = await openDelivery(slug);
+  if ("screen" in opened) return opened.screen;
+  const { project: p, studio, admin, viewer } = opened.ok;
 
-  if (isExpired(project) && !admin) {
-    return (
-      <CenteredCard studio={studio.name} next={`/p/${slug}`}>
-        <h1 className="h2">This delivery has been archived</h1>
-        <p className="muted" style={{ margin: 0 }}>
-          The files for <strong style={{ color: "var(--ink)" }}>{project.title}</strong> are no longer online.
-          {studio.email ? (
-            <>
-              {" "}To get them back, email <a href={`mailto:${studio.email}`}>{studio.email}</a>.
-            </>
-          ) : null}
-        </p>
-      </CenteredCard>
-    );
-  }
-
-  if (!(await hasProjectAccess(project))) {
-    return (
-      <CenteredCard studio={studio.name} next={`/p/${slug}`}>
-        <div className="eyebrow">{project.clientName || "Private delivery"}</div>
-        <h1 className="h2">{project.title}</h1>
-        <UnlockForm slug={slug} />
-      </CenteredCard>
-    );
-  }
-
-  const full = await getProjectFull(project.id);
+  const full = await getProjectFull(p.id);
   if (!full) notFound();
-  const [picks, viewer] = await Promise.all([picksFor(project.id), getViewer(project), saveDelivery(project)]);
+  if (!admin) await logView(p.id, viewer);
 
-  if (!admin) await logView(project.id, viewer);
+  const photos = full.photos.filter((x) => x.previewKey || x.thumbKey);
+  const cover = photos.find((x) => x.id === p.landingCoverId) ?? photos[0] ?? null;
+  const films = full.films.filter((f) => f.current);
+  const style = { ...landingTheme(p.landingBg), "--gap": `${LANDING_SPACING[p.landingSpacing] ?? 12}px` } as React.CSSProperties;
 
   return (
-    <>
-      <ClientTopbar studio={studio.name} next={`/p/${slug}`} />
-      <Gallery
-        slug={slug}
-        studio={studio.name}
-        email={studio.email}
-        viewer={viewer}
-        project={{
-          title: project.title,
-          eyebrow: [project.clientName, project.category].filter(Boolean).join(" · "),
-          shot: formatDate(project.shotDate),
-          liveUntil: formatDate(project.expiresAt),
-          nda: project.nda,
-          rawEnabled: project.rawEnabled,
-          licence: {
-            usage: project.licenceUsage,
-            territory: project.licenceTerritory,
-            term: project.licenceTerm,
-            credit: project.licenceCredit,
-            terms: project.licenceTerms,
-          },
-        }}
-        sets={full.sets.map((s) => ({ id: s.id, name: s.name }))}
-        photos={full.photos.map((p) => ({
-          id: p.id,
-          filename: p.filename,
-          setId: p.setId,
-          thumbKey: p.thumbKey,
-          previewKey: p.previewKey,
-          originalKey: p.originalKey,
-          rawKey: project.rawEnabled || admin ? p.rawKey : null,
-          size: p.size,
-          rawSize: p.rawSize,
-        }))}
-        films={full.films
-          .filter((f) => f.current)
-          .map((f) => ({
+    <div className="landing" data-tone={isDarkBg(p.landingBg) ? "dark" : "light"} style={style}>
+      <ClientShell slug={slug} viewer={viewer} isStudio={admin}>
+        <ClientTopbar studio={studio.name} next={`/p/${slug}`} home={`/p/${slug}`} />
+        <Landing
+          slug={slug}
+          email={studio.email}
+          layout={p.landingLayout}
+          groupFolders={p.landingGroupFolders}
+          nda={p.nda}
+          project={{
+            title: p.title,
+            eyebrow: [p.clientName, p.category].filter(Boolean).join(" · "),
+            intro: p.landingIntro,
+            meta: [
+              p.shotDate ? `Shot ${formatDate(p.shotDate)}` : "",
+              [photos.length ? plural(photos.length, "photo") : "", films.length ? plural(films.length, "film") : ""].filter(Boolean).join(" · "),
+              `Live until ${formatDate(p.expiresAt)}`,
+            ].filter(Boolean),
+            credit: p.licenceCredit,
+          }}
+          cover={cover ? { id: cover.id, previewKey: cover.previewKey, thumbKey: cover.thumbKey, width: cover.width, height: cover.height } : null}
+          folders={full.sets.map((s) => ({ id: s.id, name: s.name }))}
+          photos={photos.map((x) => ({ id: x.id, filename: x.filename, setId: x.setId, thumbKey: x.thumbKey, previewKey: x.previewKey, width: x.width, height: x.height }))}
+          films={films.map((f) => ({
             id: f.id,
             title: f.title,
             aspect: f.aspect,
             posterKey: f.current!.posterKey,
             duration: f.current!.duration,
             version: f.current!.version,
+            versionId: f.current!.id,
             approved: !!f.current!.approvedAt,
-            openComments: f.openComments,
           }))}
-        picks={picks.map((k) => ({ photoId: k.photoId, viewer: k.viewer }))}
-      />
-    </>
+        />
+      </ClientShell>
+    </div>
   );
 }

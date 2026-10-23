@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { requireProject } from "@/lib/auth";
+import { requireProject, studioFor } from "@/lib/auth";
+import { loadClientFolders } from "@/lib/chat";
+import { ClientShell } from "@/app/p/[slug]/client-shell";
+import { LandingForm } from "./landing-form";
 import { describeEvent, getProjectFull, picksFor, recentEvents } from "@/lib/queries";
 import { daysLeft, formatBytes, formatDate, formatTimecode, plural, timeAgo } from "@/lib/format";
 import { fileUrl } from "@/lib/urls";
@@ -34,7 +37,7 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
   const full = await getProjectFull(id);
   if (!full) notFound();
   const { project: p, sets, photos, films } = full;
-  const [picks, activity] = await Promise.all([picksFor(p.id), recentEvents(p.id)]);
+  const [picks, activity, clientFolders, studio] = await Promise.all([picksFor(p.id), recentEvents(p.id), loadClientFolders(p.id), studioFor(p)]);
 
   const h = await headers();
   const proto = h.get("x-forwarded-proto") ?? "https";
@@ -50,6 +53,7 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
   const rawCount = photos.filter((x) => x.rawKey).length;
 
   return (
+    <ClientShell slug={p.slug} viewer={studio.name} isStudio newTabLinks>
     <main className="wrap stack" style={{ paddingTop: 40, gap: 48 }}>
       {/* Header */}
       <section className="stack" style={{ gap: 14 }}>
@@ -92,19 +96,22 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
         </div>
 
         <div className="panel stack">
-          <h3 className="h3">Sets</h3>
+          <div className="row between">
+            <h3 className="h3">Folders</h3>
+            <span className="small muted">Clients see these as tabs, and as sections on the landing page.</span>
+          </div>
           <div className="row" style={{ gap: 8 }}>
             {sets.map((s) => (
               <form key={s.id} action={renameSet.bind(null, p.id, s.id)} className="row" style={{ gap: 4 }}>
                 <input name="name" defaultValue={s.name} className="input" style={{ width: 170, minHeight: 34, padding: "4px 8px" }} aria-label={`Rename ${s.name}`} />
                 <button type="submit" className="btn btn-small">Rename</button>
-                <button type="submit" formAction={deleteSet.bind(null, p.id, s.id)} className="btn btn-small btn-danger" aria-label={`Delete set ${s.name}`}>×</button>
+                <button type="submit" formAction={deleteSet.bind(null, p.id, s.id)} className="btn btn-small btn-danger" aria-label={`Delete folder ${s.name}`}>×</button>
               </form>
             ))}
           </div>
           <form action={addSet.bind(null, p.id)} className="row" style={{ gap: 6 }}>
-            <input name="name" className="input" placeholder="New set, e.g. Details" style={{ width: 240, minHeight: 34, padding: "4px 8px" }} aria-label="New set name" />
-            <button type="submit" className="btn btn-small">Add set</button>
+            <input name="name" className="input" placeholder="New folder, e.g. Details" style={{ width: 240, minHeight: 34, padding: "4px 8px" }} aria-label="New folder name" />
+            <button type="submit" className="btn btn-small">Add folder</button>
           </form>
         </div>
 
@@ -124,7 +131,13 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
             rawSize: x.rawSize,
             picks: pickCount.get(x.id) ?? 0,
           }))}
+          clientFolders={clientFolders}
         />
+        {clientFolders.length ? (
+          <p className="small muted" style={{ margin: 0 }}>
+            Your client has made {clientFolders.length === 1 ? "a folder" : `${clientFolders.length} folders`}: {clientFolders.map((f) => `${f.name} (${f.photoIds.length})`).join(", ")}. Use the filters above to see what&rsquo;s in them.
+          </p>
+        ) : null}
       </section>
 
       {/* Films */}
@@ -189,6 +202,22 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
         </form>
       </section>
 
+      {/* Landing page */}
+      <section className="stack" style={{ gap: 20 }}>
+        <div className="row between" style={{ alignItems: "baseline" }}>
+          <h2 className="h2">Landing page</h2>
+          <a className="small" href={`/p/${p.slug}`} target="_blank" rel="noreferrer">Preview as client ↗</a>
+        </div>
+        <p className="muted small" style={{ margin: 0, maxWidth: 640 }}>
+          The first thing your client sees when they open the link: the cover, your note, films pinned at the top, then every photo.
+        </p>
+        <LandingForm
+          projectId={p.id}
+          settings={{ layout: p.landingLayout, bg: p.landingBg, coverId: p.landingCoverId, intro: p.landingIntro, spacing: p.landingSpacing, groupFolders: p.landingGroupFolders }}
+          photos={photos.filter((x) => x.thumbKey).map((x) => ({ id: x.id, filename: x.filename, thumbKey: x.thumbKey }))}
+        />
+      </section>
+
       {/* Activity */}
       <section className="stack">
         <h2 className="h2">Activity</h2>
@@ -228,5 +257,6 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
         </form>
       </section>
     </main>
+    </ClientShell>
   );
 }

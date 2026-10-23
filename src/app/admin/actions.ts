@@ -7,7 +7,8 @@ import { requireActiveStudio, requireProject } from "@/lib/auth";
 import { bucket, db } from "@/lib/env";
 import { hashPassword, newId, newSlug } from "@/lib/crypto";
 import { DAY, DELIVERY_DAYS } from "@/lib/format";
-import { comments, films, filmVersions, photos, projects, sets } from "@/db/schema";
+import { comments, films, filmVersions, photos, projects, sets, type Project } from "@/db/schema";
+import { LANDING_LAYOUTS, LANDING_SPACING, validHex } from "@/lib/landing";
 
 export type FormState = { error: string };
 
@@ -128,7 +129,40 @@ export async function deleteProject(projectId: string) {
   redirect("/admin?f=all");
 }
 
-// ---------- Sets ----------
+// ---------- Landing page ----------
+
+export type LandingState = { error: string; savedAt?: number };
+
+export async function updateLanding(projectId: string, _prev: LandingState, form: FormData): Promise<LandingState> {
+  await requireProject(projectId);
+  const layout = str(form, "layout", 20);
+  const spacing = str(form, "spacing", 20);
+  const bg = str(form, "bg", 7);
+  const cover = str(form, "cover", 20);
+  if (!LANDING_LAYOUTS.some((l) => l.id === layout)) return { error: "Pick a layout." };
+  if (!(spacing in LANDING_SPACING)) return { error: "Pick the spacing." };
+  if (!validHex(bg)) return { error: "Pick a background colour." };
+  let coverId: string | null = null;
+  if (cover) {
+    const ph = await db().query.photos.findFirst({ where: and(eq(photos.id, cover), eq(photos.projectId, projectId)) });
+    coverId = ph ? ph.id : null;
+  }
+  await db()
+    .update(projects)
+    .set({
+      landingLayout: layout as Project["landingLayout"],
+      landingSpacing: spacing as Project["landingSpacing"],
+      landingBg: bg.toLowerCase(),
+      landingCoverId: coverId,
+      landingIntro: str(form, "intro", 2000),
+      landingGroupFolders: bool(form, "groupFolders"),
+    })
+    .where(eq(projects.id, projectId));
+  revalidatePath(`/admin/p/${projectId}`);
+  return { error: "", savedAt: Date.now() };
+}
+
+// ---------- Folders (called sets in the code) ----------
 
 export async function addSet(projectId: string, form: FormData) {
   await requireProject(projectId);
@@ -136,6 +170,23 @@ export async function addSet(projectId: string, form: FormData) {
   if (!name) return;
   const [{ n }] = await db().select({ n: sql<number>`count(*)` }).from(sets).where(eq(sets.projectId, projectId));
   await db().insert(sets).values({ id: newId(), projectId, name, sort: Number(n) });
+  revalidatePath(`/admin/p/${projectId}`);
+}
+
+/** Makes a new folder and moves the chosen photos into it. */
+export async function createSetWithPhotos(projectId: string, name: string, photoIds: string[]) {
+  await requireProject(projectId);
+  const clean = name.trim().slice(0, 60);
+  if (!clean) return;
+  const [{ n }] = await db().select({ n: sql<number>`count(*)` }).from(sets).where(eq(sets.projectId, projectId));
+  const id = newId();
+  await db().insert(sets).values({ id, projectId, name: clean, sort: Number(n) });
+  if (photoIds.length) {
+    await db()
+      .update(photos)
+      .set({ setId: id })
+      .where(and(eq(photos.projectId, projectId), inArray(photos.id, photoIds.slice(0, 1000))));
+  }
   revalidatePath(`/admin/p/${projectId}`);
 }
 

@@ -37,7 +37,7 @@ export function ProjectForm({ action, project, submitLabel }: Props) {
         </div>
         {!p ? (
           <div className="field">
-            <label htmlFor="sets">Sets <span className="muted">(optional, comma separated)</span></label>
+            <label htmlFor="sets">Folders <span className="muted">(optional, comma separated)</span></label>
             <input id="sets" name="sets" className="input" placeholder="Track, Static, Details, Behind the scenes" />
           </div>
         ) : null}

@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
-import { getViewer, projectForViewer, studioFor } from "@/lib/auth";
+import { getViewer, managesProject, projectForViewer, studioFor } from "@/lib/auth";
 import { db } from "@/lib/env";
 import { comments, filmVersions, films } from "@/db/schema";
 import { ClientTopbar } from "../../client-chrome";
+import { ClientShell } from "../../client-shell";
 import { Review } from "./review";
 
 export const metadata: Metadata = { title: "Film review" };
 
-export default async function FilmPage({ params }: PageProps<"/p/[slug]/film/[filmId]">) {
+export default async function FilmPage({ params, searchParams }: PageProps<"/p/[slug]/film/[filmId]">) {
   const { slug, filmId } = await params;
+  const sp = await searchParams;
   const project = await projectForViewer(slug);
   if (!project) redirect(`/p/${slug}`); // shows the password or archived screen
   const d = db();
@@ -23,15 +25,19 @@ export default async function FilmPage({ params }: PageProps<"/p/[slug]/film/[fi
     .from(comments)
     .where(inArray(comments.versionId, versions.map((v) => v.id)))
     .orderBy(asc(comments.timecode), asc(comments.createdAt));
-  const [viewer, studio] = await Promise.all([getViewer(project), studioFor(project)]);
+  const [viewer, studio, admin] = await Promise.all([getViewer(project), studioFor(project), managesProject(project)]);
+  // From a pinned moment in the chat: ?v=<version>&t=<seconds>
+  const startVersion = typeof sp.v === "string" && versions.some((v) => v.id === sp.v) ? sp.v : undefined;
+  const startAt = typeof sp.t === "string" && Number.isFinite(Number(sp.t)) ? Math.max(0, Number(sp.t)) : undefined;
 
   return (
-    <>
-      <ClientTopbar studio={studio.name} next={`/p/${slug}`} />
+    <ClientShell slug={slug} viewer={viewer} isStudio={admin}>
+      <ClientTopbar studio={studio.name} next={`/p/${slug}`} home={`/p/${slug}`} />
       <Review
         slug={slug}
         projectTitle={project.title}
-        viewer={viewer}
+        startVersion={startVersion}
+        startAt={startAt}
         film={{ id: film.id, title: film.title, aspect: film.aspect }}
         versions={versions.map((v) => ({
           id: v.id,
@@ -54,6 +60,6 @@ export default async function FilmPage({ params }: PageProps<"/p/[slug]/film/[fi
           resolved: c.resolved,
         }))}
       />
-    </>
+    </ClientShell>
   );
 }

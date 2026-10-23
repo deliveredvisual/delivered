@@ -8,8 +8,15 @@ Runs entirely on Cloudflare: the app on Workers, the database on D1, files on R2
 ## What it does
 
 **For clients** (`/p/<link>`)
+- The link opens a landing page: cover photo, your note, films pinned at the top, then every photo in high
+  resolution. Per project you choose the layout (collage, masonry, grid, large), background colour, spacing, cover
+  and whether photos are split into sections by folder
+- "Select & download" leads to the working gallery (`/p/<link>/gallery`)
+- Messages: one chat per project shared by the studio and everyone on the client side, on every client page and on
+  your project page. Photos, and films at an exact moment, can be pinned into messages; clicking a pin opens it
+- Clients can make their own folders to sort photos (a photo can be in several); you see them on your project page
 - Optional password per delivery; archived automatically after 365 days
-- Photos grouped into sets, lightbox with keyboard controls (← → P Esc)
+- Photos grouped into your folders, lightbox with keyboard controls (← → P Esc)
 - Personal selects for every person on the client side, plus a "Team selects" view
 - Downloads as ZIP: full resolution, web (2560px), RAW originals
 - Usage licence shown on every delivery
@@ -30,7 +37,9 @@ Runs entirely on Cloudflare: the app on Workers, the database on D1, files on R2
 - Projects list with time left and latest client activity
 - Drag-and-drop upload of JPEGs and RAWs; RAWs pair with their JPEG by file name
 - Files of any size: uploads go up in 32 MB chunks; previews and thumbnails are made in your browser
-- Move photos between sets, see what each client picked, full activity log
+- Folders for photos (create one while moving photos), see what each client picked and how they sorted
+  them, full activity log
+- Landing page settings per project, with a preview link
 - Extend, archive, restore, or change the link
 
 ## Deploying (no terminal needed)
@@ -77,7 +86,8 @@ npm run preview                     # the production build in the Workers runtim
 | Chunked uploads into R2 | `src/app/api/admin/upload/route.ts`, browser side in `src/lib/upload-client.ts` |
 | Browser-side ZIPs | `src/lib/zip-client.ts` |
 | Admin screens | `src/app/admin/` |
-| Client gallery and film review | `src/app/p/[slug]/` |
+| Client landing page, gallery and film review | `src/app/p/[slug]/` (`page.tsx` landing, `gallery/`, `film/`) |
+| Chat panel, pins, client folders | `src/app/p/[slug]/client-shell.tsx`, `src/lib/chat.ts`, `src/app/api/p/[slug]/` |
 
 Files in R2 live under `p/<projectId>/…`, which is how every request is checked against its project.
 

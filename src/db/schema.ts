@@ -95,11 +95,18 @@ export const projects = sqliteTable(
     licenceTerm: text("licence_term").notNull().default(""),
     licenceCredit: text("licence_credit").notNull().default(""),
     licenceTerms: text("licence_terms").notNull().default(""),
+    // Landing page (what the client sees first)
+    landingLayout: text("landing_layout", { enum: ["collage", "masonry", "grid", "large"] }).notNull().default("collage"),
+    landingBg: text("landing_bg").notNull().default("#ffffff"),
+    landingCoverId: text("landing_cover_id"), // a photo id; null = first photo
+    landingIntro: text("landing_intro").notNull().default(""),
+    landingSpacing: text("landing_spacing", { enum: ["tight", "normal", "airy"] }).notNull().default("normal"),
+    landingGroupFolders: integer("landing_group_folders", { mode: "boolean" }).notNull().default(true),
   },
   (t) => [uniqueIndex("projects_slug").on(t.slug), index("projects_studio").on(t.studioId)],
 );
 
-/** Groups of photos inside a project, e.g. Track, Static, Details. */
+/** The studio's folders inside a project, e.g. Track, Static, Details. (Called "sets" in the code, "Folders" on screen.) */
 export const sets = sqliteTable(
   "sets",
   {
@@ -207,7 +214,50 @@ export const events = sqliteTable(
   (t) => [index("events_project").on(t.projectId, t.createdAt)],
 );
 
+/** A thing pinned to a chat message: a photo, or a film (optionally a version and a moment in it). */
+export type Pin = { type: "photo"; id: string } | { type: "film"; id: string; versionId?: string; timecode?: number };
+
+/** The project chat: one thread shared by the studio and everyone on the client side. */
+export const messages = sqliteTable(
+  "messages",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    author: text("author").notNull(),
+    fromStudio: integer("from_studio", { mode: "boolean" }).notNull().default(false),
+    body: text("body").notNull().default(""),
+    pins: text("pins", { mode: "json" }).$type<Pin[]>().notNull().default([]),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [index("messages_project").on(t.projectId, t.createdAt)],
+);
+
+/** Folders the client side makes to sort photos. A photo can be in several. */
+export const clientFolders = sqliteTable(
+  "client_folders",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    createdBy: text("created_by").notNull().default(""),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [index("client_folders_project").on(t.projectId)],
+);
+
+export const clientFolderPhotos = sqliteTable(
+  "client_folder_photos",
+  {
+    folderId: text("folder_id").notNull().references(() => clientFolders.id, { onDelete: "cascade" }),
+    photoId: text("photo_id").notNull().references(() => photos.id, { onDelete: "cascade" }),
+    addedAt: integer("added_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [uniqueIndex("client_folder_photos_unique").on(t.folderId, t.photoId)],
+);
+
 export type Project = typeof projects.$inferSelect;
+export type Message = typeof messages.$inferSelect;
+export type ClientFolder = typeof clientFolders.$inferSelect;
 export type Photo = typeof photos.$inferSelect;
 export type SetRow = typeof sets.$inferSelect;
 export type Film = typeof films.$inferSelect;

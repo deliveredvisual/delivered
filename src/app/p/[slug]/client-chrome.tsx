@@ -6,12 +6,16 @@ import { currentStudio, currentUser } from "@/lib/auth";
  * Top bar every client sees: the studio's name, a small "Powered by" credit, and an account link —
  * "Your deliveries" when signed in, otherwise an offer to keep this delivery in a free account.
  */
-export async function ClientTopbar({ studio, next }: { studio: string; next?: string }) {
+export async function ClientTopbar({ studio, next, home }: { studio: string; next?: string; home?: string }) {
   const [user, team] = await Promise.all([currentUser(), currentStudio()]);
   const after = next ? `?next=${encodeURIComponent(next)}` : "";
   return (
     <header className="topbar">
-      <div className="wordmark">{studio}</div>
+      {home ? (
+        <Link href={home} className="wordmark" style={{ color: "inherit", textDecoration: "none" }}>{studio}</Link>
+      ) : (
+        <div className="wordmark">{studio}</div>
+      )}
       <div className="row small" style={{ gap: 20 }}>
         {team ? (
           <Link href="/admin" className="muted">Studio</Link>

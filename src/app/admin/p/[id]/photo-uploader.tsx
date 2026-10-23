@@ -94,12 +94,12 @@ export function PhotoUploader({ projectId, sets }: { projectId: string; sets: { 
     <div className="stack">
       {sets.length ? (
         <div className="row">
-          <label className="label" htmlFor="upload-set">Add to set</label>
+          <label className="label" htmlFor="upload-set">Add to folder</label>
           <select id="upload-set" className="select" style={{ width: "auto" }} value={setId} onChange={(e) => setSetId(e.target.value)} disabled={busy}>
             {sets.map((s) => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
-            <option value="">No set</option>
+            <option value="">No folder</option>
           </select>
         </div>
       ) : null}

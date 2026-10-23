@@ -195,3 +195,115 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .thumbs-admin .t { aspect-ratio: 3 / 2; background: #ececea; overflow: hidden; }
 .thumbs-admin img { width: 100%; height: 100%; object-fit: cover; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+/* ---------- Chat ---------- */
+.chat-fab {
+  position: fixed; right: 20px; bottom: 20px; z-index: 45; display: inline-flex; align-items: center; gap: 8px;
+  min-height: 48px; padding: 0 18px; background: var(--ink); color: #fff; border: 0; cursor: pointer;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.18); font-size: 14px; font-weight: 500;
+}
+.chat-fab[hidden] { display: none; }
+.chat-badge { background: #fff; color: var(--ink); font-size: 12px; font-weight: 600; padding: 1px 7px; min-width: 22px; text-align: center; }
+.chat-badge.muted-badge { background: rgba(255,255,255,0.18); color: #fff; font-weight: 500; }
+.chat-toast {
+  position: fixed; right: 20px; bottom: 80px; z-index: 65; display: flex; align-items: center; gap: 10px;
+  background: #fff; color: var(--ink); border: 1px solid var(--line-strong); padding: 8px 8px 8px 14px; font-size: 13px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.14); max-width: calc(100vw - 40px);
+}
+.chat-drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 60; width: min(420px, 100vw); background: #fff; color: var(--ink);
+  border-left: 1px solid var(--line); box-shadow: -18px 0 40px rgba(0,0,0,0.10); display: flex; flex-direction: column;
+}
+.chat-list { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+.chat-msg { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; background: var(--ground-2); }
+.chat-msg.studio { background: #fff; border: 1px solid var(--line-strong); }
+.chat-tag { margin-left: 8px; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; border: 1px solid var(--ink); padding: 1px 5px; vertical-align: 2px; }
+.chat-del { align-self: flex-end; background: none; border: 0; color: var(--muted); cursor: pointer; padding: 4px 0; text-decoration: underline; }
+.chat-compose { border-top: 1px solid var(--line); padding: 14px 20px 18px; display: flex; flex-direction: column; gap: 10px; }
+.chat-compose svg { vertical-align: -3px; }
+.pin-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.pin-chip {
+  display: inline-flex; flex-direction: column; gap: 4px; width: 96px; text-decoration: none; color: var(--ink); position: relative;
+}
+.pin-thumb { position: relative; width: 96px; height: 64px; background: #e3e3e0; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.pin-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.pin-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; text-shadow: 0 1px 4px rgba(0,0,0,0.6); }
+.pin-cap { font-family: var(--mono); font-size: 10.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pin-x {
+  position: absolute; top: -8px; right: -8px; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line-strong);
+  background: #fff; cursor: pointer; line-height: 1; font-size: 16px;
+}
+.pin-btn {
+  position: absolute; top: 10px; left: 10px; width: 44px; height: 44px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  background: rgba(255,255,255,0.94); color: #111; border: 1px solid rgba(0,0,0,0.18); opacity: 0; transition: opacity 0.15s;
+}
+.tile-media:hover .pin-btn, .pin-btn:focus-visible, .landing-item:hover .pin-btn { opacity: 1; }
+@media (hover: none) { .pin-btn { opacity: 1; } }
+.lb-select { background: #0d0d0d; max-width: 180px; }
+.lb-select option { background: #fff; color: var(--ink); }
+.lightbox-top .row { justify-content: flex-end; }
+
+/* ---------- Landing page ---------- */
+.landing { --row: 340px; min-height: 100vh; background: var(--ground); color: var(--ink); }
+.landing a { color: var(--ink); }
+.landing .btn-primary { color: var(--ground); }
+.landing .btn-primary:hover { background: var(--ink-2); color: var(--ground); }
+.landing .powered strong { color: var(--ink); }
+.landing .notice { background: var(--ground-2); }
+.landing-hero { width: 100%; height: min(86vh, 980px); background: var(--ground-2); overflow: hidden; }
+.landing-hero img { width: 100%; height: 100%; object-fit: cover; }
+.landing-head {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 24px 48px;
+  padding: clamp(36px, 6vw, 80px) var(--gutter) clamp(28px, 4vw, 48px);
+}
+.landing-intro { margin: 4px 0 0; font-size: clamp(17px, 1.6vw, 20px); line-height: 1.5; color: var(--ink-2); white-space: pre-line; max-width: 680px; }
+.landing-band { padding: 0 var(--gutter) clamp(32px, 5vw, 64px); }
+.landing-films { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 32px var(--gap, 24px); }
+.landing-films.one { grid-template-columns: minmax(0, 1fr); }
+.landing-films.one .landing-film-media { max-height: 78vh; }
+.landing-film { display: flex; flex-direction: column; gap: 12px; }
+.landing-film-media { position: relative; display: block; aspect-ratio: 16 / 9; background: #18191a; overflow: hidden; }
+.landing-film-media img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.6s ease; }
+.landing-film-media:hover img { transform: scale(1.02); }
+.landing-play {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 72px; height: 72px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.92); color: #111; padding-left: 4px;
+}
+.landing-item { position: relative; margin: 0; }
+.landing-open { display: block; width: 100%; padding: 0; border: 0; background: var(--ground-2); cursor: zoom-in; }
+.landing-open img { width: 100%; height: auto; object-fit: cover; display: block; }
+.landing-item .pin-btn { top: 10px; left: auto; right: 10px; }
+.lp-collage { display: flex; flex-wrap: wrap; gap: var(--gap); }
+.lp-collage::after { content: ""; flex: 999 1 0; }
+.lp-collage .landing-open img { height: 100%; }
+.lp-masonry { columns: 3 300px; column-gap: var(--gap); }
+.lp-masonry .landing-item { break-inside: avoid; margin-bottom: var(--gap); }
+.lp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: var(--gap); }
+.lp-large { display: flex; flex-direction: column; gap: var(--gap); max-width: 1600px; margin: 0 auto; }
+@media (max-width: 700px) {
+  .landing { --row: 200px; }
+  .lp-collage .landing-item { flex-basis: 100% !important; }
+}
+/* Panels that sit on top of a themed landing page keep the standard light look. */
+.chat-drawer, .chat-toast, .chat-fab, .landing .lightbox .panel {
+  --ink: #111111; --ink-2: #3d3d3d; --muted: #6b6b6b; --line: #e6e6e6; --line-strong: #cfcfcf; --ground: #ffffff; --ground-2: #f5f5f3;
+}
+.chat-drawer a, .chat-toast a { color: var(--ink); }
+.chat-drawer .btn-primary, .chat-toast .btn-primary { color: #fff; }
+
+/* ---------- Landing settings (studio) ---------- */
+.landing-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.landing-choice {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 14px;
+  border: 1px solid var(--line-strong); cursor: pointer; font: inherit; min-height: 44px;
+}
+.landing-choice[aria-pressed="true"] { outline: 2px solid #111; outline-offset: 2px; }
+.swatch { width: 44px; height: 44px; border: 1px solid #cfcfcf; cursor: pointer; padding: 0; }
+.swatch[aria-pressed="true"] { outline: 2px solid #111; outline-offset: 3px; }
+.cover-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; max-height: 300px; overflow-y: auto; padding: 4px; }
+.cover-opt { aspect-ratio: 3 / 2; padding: 0; border: 1px solid var(--line); background: var(--ground-2); cursor: pointer; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.cover-opt img { width: 100%; height: 100%; object-fit: cover; }
+.cover-opt[aria-checked="true"] { outline: 2px solid #111; outline-offset: 2px; }
+.landing[data-tone="dark"] .chat-fab { background: #fff; color: #111; }
+.landing[data-tone="dark"] .chat-fab .chat-badge { background: #111; color: #fff; }

@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { fileUrl } from "@/lib/urls";
 import { formatBytes, formatTimecode } from "@/lib/format";
-import { NamePrompt, api } from "../../name-prompt";
+import { api } from "../../name-prompt";
+import { PinIcon, useShell } from "../../client-shell";
 
 type Version = {
   id: string;
@@ -31,18 +32,18 @@ type CommentRow = {
 export function Review(props: {
   slug: string;
   projectTitle: string;
-  viewer: string;
+  startVersion?: string;
+  startAt?: number;
   film: { id: string; title: string; aspect: string };
   versions: Version[];
   comments: CommentRow[];
 }) {
   const { slug, film } = props;
   const [versions, setVersions] = useState(props.versions);
-  const [versionId, setVersionId] = useState(props.versions.at(-1)!.id);
+  const [versionId, setVersionId] = useState(props.startVersion ?? props.versions.at(-1)!.id);
   const [comments, setComments] = useState(props.comments);
-  const [viewer, setViewer] = useState(props.viewer);
-  const viewerRef = useRef(props.viewer);
-  const [askName, setAskName] = useState<null | (() => void)>(null);
+  const { viewer, who, needName, pin } = useShell();
+  const startAt = useRef(props.startAt);
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [draft, setDraft] = useState("");
@@ -61,7 +62,25 @@ export function Review(props: {
     api(slug, { op: "event", action: "view_film", detail: `${film.title} v${v.version}` });
   }, [slug, film.title, v.version]);
 
-  const needName = (fn: () => void) => (viewerRef.current ? fn() : setAskName(() => fn));
+  // Opened from a pinned moment: jump there once the video knows its length (it may already, before this runs).
+  useEffect(() => {
+    const el = video.current;
+    const at = startAt.current;
+    if (!el || at === undefined) return;
+    const go = () => {
+      el.currentTime = at;
+      startAt.current = undefined;
+    };
+    if (el.readyState >= 1) go();
+    else el.addEventListener("loadedmetadata", go, { once: true });
+    return () => el.removeEventListener("loadedmetadata", go);
+  }, [versionId]);
+
+  function pinMoment() {
+    const at = Math.floor(video.current?.currentTime ?? time);
+    video.current?.pause();
+    pin({ type: "film", id: film.id, label: film.title, thumbKey: v.posterKey, versionId: v.id, version: v.version, timecode: at });
+  }
 
   function seek(sec: number) {
     if (!video.current) return;
@@ -94,7 +113,7 @@ export function Review(props: {
   async function approve() {
     const res = await api(slug, { op: "approve", versionId });
     if (res.ok) {
-      setVersions((prev) => prev.map((x) => (x.id === versionId ? { ...x, approvedBy: viewerRef.current, approvedAt: new Date().toISOString() } : x)));
+      setVersions((prev) => prev.map((x) => (x.id === versionId ? { ...x, approvedBy: who(), approvedAt: new Date().toISOString() } : x)));
     }
   }
 
@@ -184,6 +203,9 @@ export function Review(props: {
                 Approve v{v.version}
               </button>
             )}
+            <button type="button" className="btn" onClick={pinMoment} title="Pin this film at the current moment to a message">
+              <PinIcon /> Pin at {formatTimecode(Math.floor(time))}
+            </button>
             <a className="btn" href={fileUrl(v.fileKey, `${props.projectTitle} - ${film.title} v${v.version}.${v.filename.split(".").pop() ?? "mp4"}`)}>
               Download v{v.version}
             </a>
@@ -246,19 +268,6 @@ export function Review(props: {
         </aside>
       </div>
 
-      {askName ? (
-        <NamePrompt
-          slug={slug}
-          onDone={(name) => {
-            viewerRef.current = name;
-            setViewer(name);
-            const fn = askName;
-            setAskName(null);
-            setTimeout(() => fn(), 0);
-          }}
-          onCancel={() => setAskName(null)}
-        />
-      ) : null}
     </main>
   );
 }

@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { fileUrl } from "@/lib/urls";
 import { formatBytes } from "@/lib/format";
-import { deletePhotos, movePhotos } from "../../actions";
+import { createSetWithPhotos, deletePhotos, movePhotos } from "../../actions";
 
 type PhotoLite = {
   id: string;
@@ -21,22 +21,32 @@ export function PhotoManager({
   projectId,
   photos,
   sets,
+  clientFolders = [],
 }: {
   projectId: string;
   photos: PhotoLite[];
   sets: { id: string; name: string }[];
+  clientFolders?: { id: string; name: string; photoIds: string[] }[];
 }) {
   const [filter, setFilter] = useState<string>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [target, setTarget] = useState<string>(sets[0]?.id ?? "");
+  const [target, setTarget] = useState<string>(sets[0]?.id ?? "__new");
   const [pending, start] = useTransition();
 
   const shown = useMemo(
     () =>
       photos.filter((p) =>
-        filter === "all" ? true : filter === "none" ? !p.setId : filter === "picked" ? p.picks > 0 : p.setId === filter,
+        filter === "all"
+          ? true
+          : filter === "none"
+            ? !p.setId
+            : filter === "picked"
+              ? p.picks > 0
+              : filter.startsWith("cf:")
+                ? !!clientFolders.find((f) => `cf:${f.id}` === filter)?.photoIds.includes(p.id)
+                : p.setId === filter,
       ),
-    [photos, filter],
+    [photos, filter, clientFolders],
   );
 
   const toggle = (id: string) =>
@@ -48,13 +58,13 @@ export function PhotoManager({
     });
 
   const ids = [...selected];
-  const setName = (id: string | null) => sets.find((s) => s.id === id)?.name ?? "No set";
+  const setName = (id: string | null) => sets.find((s) => s.id === id)?.name ?? "No folder";
 
   return (
     <div className="stack">
       <div className="row between">
         <div className="row" style={{ gap: 6 }}>
-          {[{ id: "all", name: `All · ${photos.length}` }, ...sets.map((s) => ({ id: s.id, name: `${s.name} · ${photos.filter((p) => p.setId === s.id).length}` })), ...(photos.some((p) => !p.setId) && sets.length ? [{ id: "none", name: "No set" }] : []), { id: "picked", name: `Picked by client · ${photos.filter((p) => p.picks > 0).length}` }].map((f) => (
+          {[{ id: "all", name: `All · ${photos.length}` }, ...sets.map((s) => ({ id: s.id, name: `${s.name} · ${photos.filter((p) => p.setId === s.id).length}` })), ...(photos.some((p) => !p.setId) && sets.length ? [{ id: "none", name: "No folder" }] : []), ...clientFolders.map((f) => ({ id: `cf:${f.id}`, name: `Client folder: ${f.name} · ${f.photoIds.length}` })), { id: "picked", name: `Picked by client · ${photos.filter((p) => p.picks > 0).length}` }].map((f) => (
             <button key={f.id} type="button" className="btn btn-small pill" aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
               {f.name}
             </button>
@@ -70,20 +80,38 @@ export function PhotoManager({
         <div className="notice row between">
           <span>{selected.size} selected</span>
           <div className="row">
-            {sets.length ? (
-              <>
-                <label className="label" htmlFor="move-to">Move to</label>
+            <>
+                <label className="label" htmlFor="move-to">Move to folder</label>
                 <select id="move-to" className="select" style={{ width: "auto", minHeight: 34, padding: "4px 8px" }} value={target} onChange={(e) => setTarget(e.target.value)}>
                   {sets.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
-                  <option value="">No set</option>
+                  <option value="">No folder</option>
+                  <option value="__new">+ New folder…</option>
                 </select>
-                <button type="button" className="btn btn-small" disabled={pending} onClick={() => start(async () => { await movePhotos(projectId, ids, target || null); setSelected(new Set()); })}>
+                <button
+                  type="button"
+                  className="btn btn-small"
+                  disabled={pending}
+                  onClick={() => {
+                    if (target === "__new") {
+                      const name = prompt("Name the new folder");
+                      if (!name?.trim()) return;
+                      start(async () => {
+                        await createSetWithPhotos(projectId, name, ids);
+                        setSelected(new Set());
+                      });
+                      return;
+                    }
+                    start(async () => {
+                      await movePhotos(projectId, ids, target || null);
+                      setSelected(new Set());
+                    });
+                  }}
+                >
                   Move
                 </button>
               </>
-            ) : null}
             <button
               type="button"
               className="btn btn-small btn-danger"

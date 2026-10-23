@@ -5,7 +5,9 @@ import Link from "next/link";
 import { fileUrl } from "@/lib/urls";
 import { formatBytes, formatTimecode, plural } from "@/lib/format";
 import { chooseSaveTarget, writeZip, type ZipEntry } from "@/lib/zip-client";
-import { NamePrompt, api } from "./name-prompt";
+import type { FolderView } from "@/lib/chat-types";
+import { api } from "./name-prompt";
+import { PinIcon, useShell } from "./client-shell";
 
 export type GalleryPhoto = {
   id: string;
@@ -32,9 +34,7 @@ export type GalleryFilm = {
 
 export type GalleryProps = {
   slug: string;
-  studio: string;
   email: string;
-  viewer: string;
   project: {
     title: string;
     eyebrow: string;
@@ -48,6 +48,9 @@ export type GalleryProps = {
   photos: GalleryPhoto[];
   films: GalleryFilm[];
   picks: { photoId: string; viewer: string }[];
+  folders: FolderView[];
+  /** Open this photo straight away (from a pinned photo in the chat). */
+  focus?: string;
 };
 
 type Preset = "full" | "web" | "raw";
@@ -55,48 +58,63 @@ type Preset = "full" | "web" | "raw";
 const baseName = (f: string) => f.replace(/\.[^.]+$/, "");
 const zipSafe = (s: string) => s.replace(/[\\/:*?"<>|]+/g, "-").trim();
 
-
 const CheckIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+);
+const FolderIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true" style={{ verticalAlign: -2 }}><path d="M3 6.5h6l2 2h10V19H3z" /></svg>
 );
 
 export function Gallery(props: GalleryProps) {
   const { slug, project, sets, photos, films } = props;
-  const [viewer, setViewerName] = useState(props.viewer);
+  const { viewer, who, needName, pin } = useShell();
   const [picks, setPicks] = useState(props.picks);
+  const [folders, setFolders] = useState(props.folders);
   const [tab, setTab] = useState<string>("all");
-  const [open, setOpen] = useState<number | null>(null);
-  const [askName, setAskName] = useState<null | (() => void)>(null);
+  // A pinned photo in the chat leads here with ?photo=… : open it straight away.
+  const [open, setOpen] = useState<number | null>(() => {
+    const i = props.focus ? photos.findIndex((p) => p.id === props.focus) : -1;
+    return i >= 0 ? i : null;
+  });
   const [dlOpen, setDlOpen] = useState(false);
+  const [fdOpen, setFdOpen] = useState(false);
   const [scope, setScope] = useState<"all" | "selects" | "tab">("all");
   const [dlState, setDlState] = useState<{ label: string; done: number; total: number } | null>(null);
   const [dlError, setDlError] = useState("");
   const [visible, setVisible] = useState(60);
+  const [newFolder, setNewFolder] = useState("");
+  const [withSelects, setWithSelects] = useState(true);
+  const [folderError, setFolderError] = useState("");
 
   const mine = useMemo(() => new Set(picks.filter((p) => p.viewer === viewer).map((p) => p.photoId)), [picks, viewer]);
   const teamPicked = useMemo(() => new Set(picks.map((p) => p.photoId)), [picks]);
   const others = useMemo(() => [...new Set(picks.map((p) => p.viewer))].filter((v) => v !== viewer), [picks, viewer]);
+  const openFolder = tab.startsWith("cf:") ? folders.find((f) => `cf:${f.id}` === tab) ?? null : null;
 
   const tabs = useMemo(() => {
-    const t = [{ id: "all", label: "All", count: photos.length }];
+    const t: { id: string; label: string; count: number; client?: boolean }[] = [{ id: "all", label: "All", count: photos.length }];
     for (const s of sets) {
       const n = photos.filter((p) => p.setId === s.id).length;
       if (n) t.push({ id: s.id, label: s.name, count: n });
     }
+    for (const f of folders) t.push({ id: `cf:${f.id}`, label: f.name, count: f.photoIds.length, client: true });
     if (mine.size) t.push({ id: "mine", label: "My selects", count: mine.size });
     if (others.length) t.push({ id: "team", label: "Team selects", count: teamPicked.size });
     return t;
-  }, [photos, sets, mine, others, teamPicked]);
+  }, [photos, sets, folders, mine, others, teamPicked]);
 
   const shown = useMemo(() => {
     if (tab === "all") return photos;
     if (tab === "mine") return photos.filter((p) => mine.has(p.id));
     if (tab === "team") return photos.filter((p) => teamPicked.has(p.id));
+    if (tab.startsWith("cf:")) {
+      const f = folders.find((x) => `cf:${x.id}` === tab);
+      const ids = new Set(f?.photoIds ?? []);
+      return photos.filter((p) => ids.has(p.id));
+    }
     return photos.filter((p) => p.setId === tab);
-  }, [photos, tab, mine, teamPicked]);
+  }, [photos, tab, mine, teamPicked, folders]);
 
-  // Refs so a pick made right after someone types their name uses that name, not the stale one.
-  const viewerRef = useRef(props.viewer);
   const picksRef = useRef(picks);
   useEffect(() => {
     picksRef.current = picks;
@@ -104,8 +122,8 @@ export function Gallery(props: GalleryProps) {
 
   const togglePick = useCallback(
     (photoId: string) => {
-      const run = async () => {
-        const me = viewerRef.current;
+      needName(async () => {
+        const me = who();
         const has = (list: typeof picks) => list.some((p) => p.photoId === photoId && p.viewer === me);
         const on = !has(picksRef.current);
         const add = (prev: typeof picks) => (has(prev) ? prev : [...prev, { photoId, viewer: me }]);
@@ -113,16 +131,55 @@ export function Gallery(props: GalleryProps) {
         setPicks(on ? add : remove);
         const res = await api(slug, { op: "pick", photoId, on });
         if (!res.ok) setPicks(on ? remove : add);
-      };
-      if (viewerRef.current) run();
-      else setAskName(() => run);
+      });
     },
-    [slug],
+    [slug, needName, who],
   );
+
+  const pinPhoto = (p: GalleryPhoto) => pin({ type: "photo", id: p.id, label: p.filename, thumbKey: p.thumbKey });
+
+  // ----- client folders -----
+  async function folderOp(body: object): Promise<{ id?: string } | null> {
+    setFolderError("");
+    const res = await api(slug, body);
+    if (!res.ok) {
+      setFolderError("That didn't work. Try again.");
+      return null;
+    }
+    const data = (await res.json()) as { folders: FolderView[]; id?: string };
+    setFolders(data.folders);
+    return data;
+  }
+
+  function createFolder(name: string, photoIds: string[], then?: (id: string) => void) {
+    const clean = name.trim();
+    if (!clean) return;
+    needName(async () => {
+      const r = await folderOp({ op: "folder_create", name: clean, photoIds });
+      if (r?.id) {
+        setNewFolder("");
+        then?.(r.id);
+      }
+    });
+  }
+
+  function addToFolder(folderId: string, photoIds: string[]) {
+    if (!photoIds.length) return;
+    needName(() => folderOp({ op: "folder_add", folderId, photoIds }));
+  }
+
+  function lightboxFolder(value: string, photoId: string) {
+    if (value === "__new") {
+      const name = prompt("Name the new folder");
+      if (name) createFolder(name, [photoId]);
+    } else if (value) {
+      addToFolder(value, [photoId]);
+    }
+  }
 
   // ----- downloads -----
   const scopePhotos = scope === "all" ? photos : scope === "selects" ? photos.filter((p) => mine.has(p.id)) : shown;
-  const scopeLabel = scope === "all" ? "All" : scope === "selects" ? "Selects" : tabs.find((t) => t.id === tab)?.label ?? "Set";
+  const scopeLabel = scope === "all" ? "All" : scope === "selects" ? "Selects" : tabs.find((t) => t.id === tab)?.label ?? "Folder";
   const setName = (id: string | null) => sets.find((s) => s.id === id)?.name ?? "";
   const folder = (p: GalleryPhoto) => (sets.length && setName(p.setId) ? `${zipSafe(setName(p.setId))}/` : "");
 
@@ -140,7 +197,7 @@ export function Gallery(props: GalleryProps) {
     }
   }
 
-  const presets: { id: Preset; label: string; detail: string; disabled?: string }[] = [
+  const presets: { id: Preset; label: string; detail: string }[] = [
     {
       id: "full",
       label: "Full resolution",
@@ -161,7 +218,7 @@ export function Gallery(props: GalleryProps) {
     const entries = entriesFor(preset);
     if (!entries.length) return;
     const label = presets.find((p) => p.id === preset)!.label;
-    const zipName = `${zipSafe(project.title)} - ${scopeLabel} - ${label}.zip`;
+    const zipName = `${zipSafe(project.title)} - ${zipSafe(scopeLabel)} - ${label}.zip`;
     setDlError("");
     try {
       const target = await chooseSaveTarget(zipName, entries.reduce((s, e) => s + e.size, 0));
@@ -182,6 +239,7 @@ export function Gallery(props: GalleryProps) {
   useEffect(() => {
     if (open === null) return;
     const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.closest?.("input, textarea, select, .chat-drawer")) return;
       if (e.key === "Escape") setOpen(null);
       else if (e.key === "ArrowRight") setOpen((i) => (i === null ? i : Math.min(shown.length - 1, i + 1)));
       else if (e.key === "ArrowLeft") setOpen((i) => (i === null ? i : Math.max(0, i - 1)));
@@ -202,14 +260,18 @@ export function Gallery(props: GalleryProps) {
 
   return (
     <main className="wrap">
-      <section className="stack" style={{ padding: "56px 0 32px", gap: 14 }}>
+      <section className="stack" style={{ padding: "40px 0 32px", gap: 14 }}>
+        <Link href={`/p/${slug}`} className="small" style={{ textDecoration: "none", color: "#4a4a4a", minHeight: 44, display: "inline-flex", alignItems: "center", gap: 6, alignSelf: "flex-start" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+          Overview
+        </Link>
         {project.eyebrow ? <div className="eyebrow">{project.eyebrow}</div> : null}
         <h1 className="h1">{project.title}</h1>
         <div className="meta">
           {project.shot ? <span>Shot {project.shot}</span> : null}
           <span>
-            {photos.length} photo{photos.length === 1 ? "" : "s"}
-            {films.length ? ` · ${films.length} film${films.length === 1 ? "" : "s"}` : ""}
+            {plural(photos.length, "photo")}
+            {films.length ? ` · ${plural(films.length, "film")}` : ""}
           </span>
           <span>Live until {project.liveUntil}</span>
         </div>
@@ -264,22 +326,75 @@ export function Gallery(props: GalleryProps) {
       {photos.length ? (
         <>
           <section className="tabs-bar" style={{ marginTop: 40 }}>
-            <nav className="tabs" aria-label="Sets">
+            <nav className="tabs" aria-label="Folders">
               {tabs.map((t) => (
                 <button key={t.id} type="button" className="tab" aria-current={tab === t.id} onClick={() => {
                   setTab(t.id);
                   setVisible(60);
                 }}>
+                  {t.client ? <><FolderIcon />{" "}</> : null}
                   {t.label} <span className="count">{t.count}</span>
                 </button>
               ))}
             </nav>
             <div className="row" style={{ padding: "8px 0" }}>
+              <div className="dl-wrap">
+                <button type="button" className="btn" aria-expanded={fdOpen} onClick={() => { setFdOpen((o) => !o); setDlOpen(false); }}>
+                  <FolderIcon /> Folders
+                </button>
+                {fdOpen ? (
+                  <div className="dl-menu" role="dialog" aria-label="Your folders">
+                    <div className="stack" style={{ gap: 4 }}>
+                      <div style={{ fontSize: 14, fontWeight: 500 }}>Your folders</div>
+                      <div className="small muted">Sort photos your own way. Everyone on your side sees these folders, and so does the studio.</div>
+                    </div>
+                    <form
+                      className="stack"
+                      style={{ gap: 8 }}
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        createFolder(newFolder, withSelects ? [...mine] : [], (id) => {
+                          setTab(`cf:${id}`);
+                          setFdOpen(false);
+                        });
+                      }}
+                    >
+                      <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+                        <input className="input" value={newFolder} onChange={(e) => setNewFolder(e.target.value)} placeholder="New folder, e.g. Website hero" aria-label="New folder name" maxLength={60} />
+                        <button type="submit" className="btn btn-small" disabled={!newFolder.trim()}>Create</button>
+                      </div>
+                      {mine.size ? (
+                        <label className="check small">
+                          <input type="checkbox" checked={withSelects} onChange={(e) => setWithSelects(e.target.checked)} />
+                          <span>Put my {plural(mine.size, "select")} in it</span>
+                        </label>
+                      ) : null}
+                    </form>
+                    {folders.length ? (
+                      <div>
+                        {folders.map((f) => (
+                          <div key={f.id} className="dl-row">
+                            <button type="button" className="stack" style={{ gap: 2, background: "none", border: 0, padding: 0, textAlign: "left", cursor: "pointer" }} onClick={() => { setTab(`cf:${f.id}`); setFdOpen(false); }}>
+                              <span style={{ fontSize: 14, fontWeight: 500 }}><FolderIcon /> {f.name}</span>
+                              <span className="small muted">{plural(f.photoIds.length, "photo")}{f.createdBy ? ` · made by ${f.createdBy}` : ""}</span>
+                            </button>
+                            {mine.size ? (
+                              <button type="button" className="btn btn-small" onClick={() => addToFolder(f.id, [...mine])}>Add my selects</button>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {folderError ? <p className="error" role="alert">{folderError}</p> : null}
+                    <div className="small muted">Add single photos from the large view, or tick selects and add them all at once.</div>
+                  </div>
+                ) : null}
+              </div>
               <button type="button" className="btn" onClick={() => setTab(mine.size ? "mine" : tab)} title="Tick photos to add them to your selects">
                 <CheckIcon /> Selects · {mine.size}
               </button>
               <div className="dl-wrap">
-                <button type="button" className="btn btn-primary" aria-expanded={dlOpen} onClick={() => setDlOpen((o) => !o)} disabled={!!dlState}>
+                <button type="button" className="btn btn-primary" aria-expanded={dlOpen} onClick={() => { setDlOpen((o) => !o); setFdOpen(false); }} disabled={!!dlState}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14" /></svg>
                   {dlState ? `Zipping ${dlState.done}/${dlState.total}` : "Download"}
                 </button>
@@ -303,9 +418,9 @@ export function Gallery(props: GalleryProps) {
                         <div key={p.id} className="dl-row">
                           <div className="stack" style={{ gap: 3 }}>
                             <div style={{ fontSize: 14, fontWeight: 500 }}>{p.label}</div>
-                            <div className="small muted">{p.disabled ?? p.detail}</div>
+                            <div className="small muted">{p.detail}</div>
                           </div>
-                          <button type="button" className="btn btn-small" disabled={!!p.disabled || !entriesFor(p.id).length} onClick={() => download(p.id)} aria-label={`Download ${p.label} as ZIP`}>
+                          <button type="button" className="btn btn-small" disabled={!entriesFor(p.id).length} onClick={() => download(p.id)} aria-label={`Download ${p.label} as ZIP`}>
                             ZIP
                           </button>
                         </div>
@@ -317,6 +432,27 @@ export function Gallery(props: GalleryProps) {
               </div>
             </div>
           </section>
+
+          {openFolder ? (
+            <div className="row between small" style={{ paddingTop: 16 }}>
+              <span className="muted">
+                Your folder{openFolder.createdBy ? `, made by ${openFolder.createdBy}` : ""}.{openFolder.photoIds.length ? "" : " Empty so far: add photos from the large view or the Folders menu."}
+              </span>
+              <span className="row" style={{ gap: 6 }}>
+                <button type="button" className="btn btn-small" onClick={() => {
+                  const name = prompt("Rename folder", openFolder.name);
+                  if (name?.trim()) needName(() => folderOp({ op: "folder_rename", folderId: openFolder.id, name }));
+                }}>Rename</button>
+                <button type="button" className="btn btn-small btn-danger" onClick={() => {
+                  if (confirm(`Delete the folder “${openFolder.name}”? The photos stay in the gallery.`)) {
+                    folderOp({ op: "folder_delete", folderId: openFolder.id });
+                    setTab("all");
+                  }
+                }}>Delete folder</button>
+              </span>
+            </div>
+          ) : null}
+
           {dlState ? (
             <div className="stack" style={{ gap: 6, paddingTop: 12 }}>
               <div className="small">Preparing {dlState.label}: {dlState.done} of {dlState.total} files. Keep this tab open.</div>
@@ -337,6 +473,9 @@ export function Gallery(props: GalleryProps) {
                       {p.rawKey && !p.originalKey ? "RAW file" : "No preview"}
                     </button>
                   )}
+                  <button type="button" className="pin-btn" onClick={() => pinPhoto(p)} aria-label={`Pin ${p.filename} to a message`} title="Pin to a message">
+                    <PinIcon />
+                  </button>
                   <button type="button" className="pick" aria-pressed={mine.has(p.id)} aria-label={`${mine.has(p.id) ? "Remove" : "Add"} ${p.filename} ${mine.has(p.id) ? "from" : "to"} your selects`} onClick={() => togglePick(p.id)}>
                     <CheckIcon />
                   </button>
@@ -346,7 +485,11 @@ export function Gallery(props: GalleryProps) {
                 </div>
                 <figcaption className="tile-cap">
                   <span>{p.filename}</span>
-                  <span>{setName(p.setId)}</span>
+                  {openFolder ? (
+                    <button type="button" className="chat-del" style={{ padding: 0 }} onClick={() => folderOp({ op: "folder_remove", folderId: openFolder.id, photoIds: [p.id] })}>Remove from folder</button>
+                  ) : (
+                    <span>{setName(p.setId)}</span>
+                  )}
                 </figcaption>
               </figure>
             ))}
@@ -362,7 +505,7 @@ export function Gallery(props: GalleryProps) {
         </>
       ) : null}
 
-      <footer id="terms" className="stack" style={{ marginTop: 80, paddingTop: 24, borderTop: "1px solid var(--line)", gap: 12 }}>
+      <footer id="terms" className="stack" style={{ marginTop: 80, paddingTop: 24, paddingBottom: 96, borderTop: "1px solid var(--line)", gap: 12 }}>
         {lic.terms ? (
           <details>
             <summary style={{ cursor: "pointer", minHeight: 44, display: "flex", alignItems: "center" }}>Full licence terms</summary>
@@ -383,6 +526,23 @@ export function Gallery(props: GalleryProps) {
               <button type="button" className="lb-btn" aria-pressed={mine.has(current.id)} onClick={() => togglePick(current.id)}>
                 <CheckIcon /> {mine.has(current.id) ? "Selected" : "Select"}
               </button>
+              <button type="button" className="lb-btn" onClick={() => pinPhoto(current)}>
+                <PinIcon /> Pin
+              </button>
+              <select
+                className="lb-btn lb-select"
+                value=""
+                aria-label="Add to folder"
+                onChange={(e) => lightboxFolder(e.target.value, current.id)}
+              >
+                <option value="">Add to folder…</option>
+                {folders.map((f) => (
+                  <option key={f.id} value={f.id} disabled={f.photoIds.includes(current.id)}>
+                    {f.name}{f.photoIds.includes(current.id) ? " ✓" : ""}
+                  </option>
+                ))}
+                <option value="__new">+ New folder…</option>
+              </select>
               {current.previewKey ? (
                 <a className="lb-btn" href={fileUrl(current.previewKey, baseName(current.filename) + "_web.jpg")}>Web</a>
               ) : null}
@@ -417,21 +577,6 @@ export function Gallery(props: GalleryProps) {
             {project.nda ? <span>Confidential</span> : null}
           </div>
         </div>
-      ) : null}
-
-      {askName ? (
-        <NamePrompt
-          slug={slug}
-          onDone={(name) => {
-            viewerRef.current = name;
-            setViewerName(name);
-            const fn = askName;
-            setAskName(null);
-            // Run the action that asked for a name, now under that name.
-            setTimeout(() => fn(), 0);
-          }}
-          onCancel={() => setAskName(null)}
-        />
       ) : null}
     </main>
   );

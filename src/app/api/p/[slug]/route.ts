@@ -1,11 +1,12 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { fail, json } from "@/lib/api";
-import { getViewer, managesProject, projectForViewer, setViewer, studioFor } from "@/lib/auth";
+import { currentUser, getViewer, managesProject, projectForViewer, setViewer, studioFor } from "@/lib/auth";
+import { cleanPins, loadClientFolders, loadMessages } from "@/lib/chat";
 import { db } from "@/lib/env";
 import { newId } from "@/lib/crypto";
 import { logEvent } from "@/lib/queries";
 import { formatTimecode } from "@/lib/format";
-import { comments, films, filmVersions, photos, picks } from "@/db/schema";
+import { clientFolderPhotos, clientFolders, comments, films, filmVersions, messages, photos, picks } from "@/db/schema";
 
 type Body =
   | { op: "viewer"; name: string }
@@ -14,9 +15,16 @@ type Body =
   | { op: "comment"; versionId: string; timecode: number; body: string; org?: string }
   | { op: "resolve"; commentId: string; resolved: boolean }
   | { op: "approve"; versionId: string }
-  | { op: "unapprove"; versionId: string };
+  | { op: "unapprove"; versionId: string }
+  | { op: "message"; body: string; pins?: unknown }
+  | { op: "delete_message"; messageId: string }
+  | { op: "folder_create"; name: string; photoIds?: string[] }
+  | { op: "folder_rename"; folderId: string; name: string }
+  | { op: "folder_delete"; folderId: string }
+  | { op: "folder_add"; folderId: string; photoIds: string[] }
+  | { op: "folder_remove"; folderId: string; photoIds: string[] };
 
-/** Everything a client can do on a delivery: set their name, pick photos, comment on and approve films. */
+/** Everything a client can do on a delivery: set their name, pick photos, comment on and approve films, chat, sort photos into folders. */
 export async function POST(request: Request, ctx: RouteContext<"/api/p/[slug]">): Promise<Response> {
   const { slug } = await ctx.params;
   const project = await projectForViewer(slug);
@@ -95,8 +103,78 @@ export async function POST(request: Request, ctx: RouteContext<"/api/p/[slug]">)
       if (!admin) await logEvent(project.id, viewer, "unapprove", `${version.f.title} v${version.v.version}`);
       return json({ ok: true });
     }
+    case "message": {
+      const text = String(body.body ?? "").trim().slice(0, 4000);
+      const pins = await cleanPins(project.id, body.pins);
+      if (!text && !pins.length) return fail("Write a message first");
+      const user = admin ? await currentUser() : null;
+      await d.insert(messages).values({
+        id: newId(),
+        projectId: project.id,
+        author: admin ? user?.name || viewer : viewer,
+        fromStudio: admin,
+        body: text,
+        pins,
+        createdAt: new Date(),
+      });
+      if (!admin) await logEvent(project.id, viewer, "message", text.slice(0, 80));
+      return json({ ok: true, messages: await loadMessages(project.id) });
+    }
+    case "delete_message": {
+      if (!admin) return fail("Only the studio can delete messages", 403);
+      await d.delete(messages).where(and(eq(messages.id, String(body.messageId)), eq(messages.projectId, project.id)));
+      return json({ ok: true, messages: await loadMessages(project.id) });
+    }
+    case "folder_create": {
+      const name = String(body.name ?? "").trim().slice(0, 60);
+      if (!name) return fail("Name the folder");
+      const id = newId();
+      await d.insert(clientFolders).values({ id, projectId: project.id, name, createdBy: viewer, createdAt: new Date() });
+      if (body.photoIds?.length) await addToFolder(id, project.id, body.photoIds);
+      if (!admin) await logEvent(project.id, viewer, "folder", name);
+      return json({ ok: true, id, folders: await loadClientFolders(project.id) });
+    }
+    case "folder_rename":
+    case "folder_delete":
+    case "folder_add":
+    case "folder_remove": {
+      const folder = await d.query.clientFolders.findFirst({ where: and(eq(clientFolders.id, String(body.folderId)), eq(clientFolders.projectId, project.id)) });
+      if (!folder) return fail("No such folder", 404);
+      if (body.op === "folder_rename") {
+        const name = String(body.name ?? "").trim().slice(0, 60);
+        if (!name) return fail("Name the folder");
+        await d.update(clientFolders).set({ name }).where(eq(clientFolders.id, folder.id));
+      } else if (body.op === "folder_delete") {
+        await d.delete(clientFolders).where(eq(clientFolders.id, folder.id));
+      } else if (body.op === "folder_add") {
+        await addToFolder(folder.id, project.id, body.photoIds);
+      } else {
+        const ids = (Array.isArray(body.photoIds) ? body.photoIds : []).slice(0, 2000).map(String);
+        if (ids.length) await d.delete(clientFolderPhotos).where(and(eq(clientFolderPhotos.folderId, folder.id), inArray(clientFolderPhotos.photoId, ids)));
+      }
+      return json({ ok: true, folders: await loadClientFolders(project.id) });
+    }
     default:
       return fail("Unknown op");
+  }
+}
+
+/** Adds this project's photos (ignoring any others) to a client folder. */
+async function addToFolder(folderId: string, projectId: string, photoIds: unknown) {
+  const ids = (Array.isArray(photoIds) ? photoIds : []).slice(0, 2000).map(String);
+  if (!ids.length) return;
+  const d = db();
+  const own: string[] = [];
+  for (let i = 0; i < ids.length; i += 90) {
+    const rows = await d.select({ id: photos.id }).from(photos).where(and(eq(photos.projectId, projectId), inArray(photos.id, ids.slice(i, i + 90))));
+    own.push(...rows.map((r) => r.id));
+  }
+  const now = Date.now();
+  for (let i = 0; i < own.length; i += 30) {
+    await d
+      .insert(clientFolderPhotos)
+      .values(own.slice(i, i + 30).map((photoId, j) => ({ folderId, photoId, addedAt: new Date(now + i + j) })))
+      .onConflictDoNothing();
   }
 }
 

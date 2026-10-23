@@ -113,6 +113,10 @@ export function describeEvent(e: { viewer: string; action: string; detail: strin
       return `${who} commented on ${e.detail}`;
     case "approve":
       return `${who} approved ${e.detail}`;
+    case "message":
+      return `${who} sent a message${e.detail ? `: “${e.detail}”` : ""}`;
+    case "folder":
+      return `${who} made a folder: ${e.detail}`;
     case "unapprove":
       return `${who} undid their approval of ${e.detail}`;
     default:
