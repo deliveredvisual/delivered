@@ -116,7 +116,7 @@ export function PhotoUploader({ projectId, sets }: { projectId: string; sets: { 
           start([...e.dataTransfer.files]);
         }}
       >
-        <div>Drop your exported JPEGs here, along with RAW files if you're offering them.</div>
+        <div>Drop your exported JPEGs here, along with RAW files if you’re offering them.</div>
         <div className="small muted">RAW files are matched to their JPEG by file name (AP_0412.ARW goes with AP_0412.jpg).</div>
         <input
           ref={input}

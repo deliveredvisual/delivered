@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { adminGuard, fail, json, projectIdFromKey } from "@/lib/api";
 import { db } from "@/lib/env";

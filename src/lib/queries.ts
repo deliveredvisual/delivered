@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
 import { db } from "./env";
 import { comments, events, films, filmVersions, photos, picks, projects, sets } from "@/db/schema";
 import { newId } from "./crypto";
@@ -11,10 +11,10 @@ export async function listProjects() {
   const rows = await d
     .select({
       project: projects,
-      photoCount: sql<number>`(select count(*) from photos p where p.project_id = ${projects.id})`,
-      photoBytes: sql<number>`(select coalesce(sum(p.size + p.raw_size), 0) from photos p where p.project_id = ${projects.id})`,
-      filmCount: sql<number>`(select count(*) from films f where f.project_id = ${projects.id})`,
-      filmBytes: sql<number>`(select coalesce(sum(v.size), 0) from film_versions v join films f on f.id = v.film_id where f.project_id = ${projects.id})`,
+      photoCount: sql<number>`(select count(*) from photos p where p.project_id = "projects"."id")`,
+      photoBytes: sql<number>`(select coalesce(sum(p.size + p.raw_size), 0) from photos p where p.project_id = "projects"."id")`,
+      filmCount: sql<number>`(select count(*) from films f where f.project_id = "projects"."id")`,
+      filmBytes: sql<number>`(select coalesce(sum(v.size), 0) from film_versions v join films f on f.id = v.film_id where f.project_id = "projects"."id")`,
     })
     .from(projects)
     .orderBy(desc(projects.createdAt));
@@ -23,7 +23,7 @@ export async function listProjects() {
     .select({ projectId: events.projectId, viewer: events.viewer, action: events.action, detail: events.detail, createdAt: events.createdAt })
     .from(events)
     .where(
-      sql`${events.createdAt} = (select max(e2.created_at) from events e2 where e2.project_id = ${events.projectId})`,
+      sql`"events"."created_at" = (select max(e2.created_at) from events e2 where e2.project_id = "events"."project_id")`,
     );
   const byProject = new Map(latest.map((e) => [e.projectId, e]));
 
@@ -79,6 +79,16 @@ export async function logEvent(projectId: string, viewer: string, action: string
   await db()
     .insert(events)
     .values({ id: newId(), projectId, viewer, action, detail, createdAt: new Date() });
+}
+
+/** Logs a view at most once an hour per person. */
+export async function logView(projectId: string, viewer: string) {
+  const recent = await db()
+    .select({ id: events.id })
+    .from(events)
+    .where(and(eq(events.projectId, projectId), eq(events.action, "view"), eq(events.viewer, viewer), gt(events.createdAt, new Date(Date.now() - 3600_000))))
+    .limit(1);
+  if (!recent.length) await logEvent(projectId, viewer, "view");
 }
 
 /** Human sentence for the activity feed. */

@@ -2,13 +2,28 @@ import { adminGuard, fail, json, projectIdFromKey } from "@/lib/api";
 import { bucket } from "@/lib/env";
 
 /**
+ * R2 needs to know a body's length before it accepts it. On Cloudflare a FixedLengthStream streams the chunk
+ * straight through without holding it in memory; the local dev server lacks that class, so it buffers instead.
+ */
+async function sizedBody(request: Request): Promise<ReadableStream | ArrayBuffer | null> {
+  const length = Number(request.headers.get("content-length"));
+  const FLS = (globalThis as { FixedLengthStream?: new (n: number) => TransformStream }).FixedLengthStream;
+  if (request.body && FLS && Number.isFinite(length) && length > 0) {
+    const { readable, writable } = new FLS(length);
+    request.body.pipeTo(writable).catch(() => {});
+    return readable;
+  }
+  return request.body ? await request.arrayBuffer() : null;
+}
+
+/**
  * Chunked upload into R2, driven by the browser.
- *   POST ?op=put&key=…            body = whole file (small files, ≤ 50 MB)
+ *   POST ?op=put&key=…            body = whole file (small files, ≤ 32 MB)
  *   POST ?op=start&key=…          → { uploadId }
  *   POST ?op=part&key=…&uploadId=…&part=N   body = chunk → { etag }
  *   POST ?op=complete&key=…&uploadId=…      body = { parts: [{ partNumber, etag }] }
  *   POST ?op=abort&key=…&uploadId=…
- * Chunks go through the app because a Worker request can be up to 100 MB; files are split into 50 MB parts.
+ * Chunks go through the app because a Worker request can be up to 100 MB; files are split into 32 MB parts.
  */
 export async function POST(request: Request): Promise<Response> {
   const denied = await adminGuard();
@@ -23,8 +38,9 @@ export async function POST(request: Request): Promise<Response> {
 
   switch (op) {
     case "put": {
-      if (!request.body) return fail("Empty body");
-      const obj = await b.put(key, request.body, { httpMetadata: { contentType } });
+      const body = await sizedBody(request);
+      if (!body) return fail("Empty body");
+      const obj = await b.put(key, body, { httpMetadata: { contentType } });
       return json({ ok: true, size: obj?.size ?? 0 });
     }
     case "start": {
@@ -35,9 +51,10 @@ export async function POST(request: Request): Promise<Response> {
       const uploadId = url.searchParams.get("uploadId") ?? "";
       const partNumber = Number(url.searchParams.get("part"));
       if (!uploadId || !Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) return fail("Bad part");
-      if (!request.body) return fail("Empty body");
+      const body = await sizedBody(request);
+      if (!body) return fail("Empty body");
       const upload = b.resumeMultipartUpload(key, uploadId);
-      const part = await upload.uploadPart(partNumber, request.body);
+      const part = await upload.uploadPart(partNumber, body);
       return json({ partNumber: part.partNumber, etag: part.etag });
     }
     case "complete": {

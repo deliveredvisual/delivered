@@ -207,7 +207,7 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
             ))}
           </ul>
         ) : (
-          <p className="muted small">Nothing yet. You'll see views, picks, comments and downloads here.</p>
+          <p className="muted small">Nothing yet. You’ll see views, picks, comments and downloads here.</p>
         )}
       </section>
 

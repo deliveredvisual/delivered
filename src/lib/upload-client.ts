@@ -4,7 +4,7 @@ import { customAlphabet } from "nanoid";
 
 export const clientId = customAlphabet("0123456789abcdefghijkmnopqrstuvwxyz", 16);
 
-const PART = 50 * 1024 * 1024; // 50 MiB: under the 100 MB request limit, above R2's 5 MiB minimum part
+const PART = 32 * 1024 * 1024; // 32 MiB: well under the 100 MB request limit, above R2's 5 MiB minimum part
 
 export const RAW_EXT = ["arw", "cr2", "cr3", "nef", "nrw", "raf", "dng", "orf", "rw2", "pef", "srw", "3fr", "iiq", "x3f", "erf", "mos", "rwl"];
 export const IMAGE_EXT = ["jpg", "jpeg", "png", "tif", "tiff", "webp", "heic", "heif"];
@@ -21,6 +21,7 @@ export function safeName(name: string): string {
   return name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 120) || "file";
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- each endpoint returns its own small JSON shape
 function post(url: string, body: Blob | string | null, onProgress?: (loaded: number) => void): Promise<any> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -28,7 +29,7 @@ function post(url: string, body: Blob | string | null, onProgress?: (loaded: num
     if (typeof body === "string") xhr.setRequestHeader("content-type", "application/json");
     xhr.upload.onprogress = (e) => onProgress?.(e.loaded);
     xhr.onload = () => {
-      let data: any = null;
+      let data: { error?: string } | null = null;
       try {
         data = JSON.parse(xhr.responseText);
       } catch {}
