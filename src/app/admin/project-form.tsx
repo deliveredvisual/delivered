@@ -56,7 +56,7 @@ export function ProjectForm({ action, project, submitLabel }: Props) {
         ) : null}
         <label className="check">
           <input type="checkbox" name="nda" defaultChecked={p?.nda} />
-          <span>NDA mode: watermark previews, hide share options, and mark the delivery confidential</span>
+          <span>NDA mode: show a confidential notice to the client and block right-click saving</span>
         </label>
         <label className="check">
           <input type="checkbox" name="rawEnabled" defaultChecked={p?.rawEnabled} />

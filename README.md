@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Delivered Visual
 
-## Getting Started
+Private photo and film delivery for B2B clients. Each shoot gets a private link where the client can browse
+photos by set, tick their selects, download in the size they need, and review films with timecoded comments.
 
-First, run the development server:
+Runs entirely on Cloudflare: the app on Workers, the database on D1, files on R2.
+
+## What it does
+
+**For clients** (`/p/<link>`)
+- Optional password per delivery; archived automatically after 365 days
+- Photos grouped into sets, lightbox with keyboard controls (← → P Esc)
+- Personal selects for every person on the client side, plus a "Team selects" view
+- Downloads as ZIP: full resolution, web (2560px), social crops (4:5 and 9:16), RAW originals
+- Full-resolution and RAW held until the invoice is paid, if you choose
+- Usage licence shown on every delivery
+- Films with versions (v1, v2…), comments pinned to a timecode, resolve, approve
+- NDA mode: confidential notice, right-click saving disabled
+
+**For you** (`/admin`)
+- Projects list with time left, invoice status and latest client activity
+- Drag-and-drop upload of JPEGs and RAWs; RAWs pair with their JPEG by file name
+- Files of any size: uploads go up in 32 MB chunks; previews and thumbnails are made in your browser
+- Move photos between sets, see what each client picked, full activity log
+- Extend, archive, restore, or change the link
+
+## Deploying (no terminal needed)
+
+You'll do these once in the Cloudflare dashboard.
+
+1. **Workers plan.** Workers & Pages → Plans → choose **Workers Paid** ($5/month). The free plan's CPU limit is too
+   tight for the app.
+2. **Database.** Storage & Databases → D1 → **Create database** → name it `delivered-visual`. Copy the
+   **Database ID** and send it to Claude, who puts it into `wrangler.jsonc` and pushes.
+3. **File storage.** R2 → **Create bucket** → name it `delivered-visual-files`, location Automatic.
+   (R2 needs a payment method on the account; storage is $0.015 per GB-month and downloads are free.)
+4. **Connect the code.** Workers & Pages → Create → **Import a repository** → GitHub → `deliveredvisual/delivered`.
+   - Project name: `delivered-visual`
+   - Build command: `npx opennextjs-cloudflare build`
+   - Deploy command: `npx wrangler d1 migrations apply DB --remote && npx opennextjs-cloudflare deploy`
+5. **Secrets.** In the new Worker → Settings → Variables and Secrets → add two **Secrets**:
+   - `ADMIN_PASSWORD`: the password you'll sign in with
+   - `SESSION_SECRET`: a long random string, 40+ characters (generate one in your password manager)
+6. **Domain.** Worker → Settings → Domains & Routes → Add → Custom domain → `deliveredvisual.com`.
+
+Every push to `main` then deploys automatically. Sign in at `https://deliveredvisual.com/login`.
+
+To change the studio name or contact email shown to clients, edit `STUDIO_NAME` and `STUDIO_EMAIL` in
+`wrangler.jsonc`.
+
+## Running it locally
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .dev.vars.example .dev.vars     # set ADMIN_PASSWORD and SESSION_SECRET
+npm run db:migrate:local
+npm run dev                         # http://localhost:3000
+npm run preview                     # the production build in the Workers runtime, http://localhost:8787
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## How it's put together
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Part | Where |
+| --- | --- |
+| Database schema | `src/db/schema.ts`, migrations in `drizzle/` (`npm run db:generate` after schema changes) |
+| Sign-in, client access, payment hold | `src/lib/auth.ts` |
+| File serving with access checks and video seeking | `src/app/api/file/route.ts` |
+| Chunked uploads into R2 | `src/app/api/admin/upload/route.ts`, browser side in `src/lib/upload-client.ts` |
+| Browser-side ZIPs and social crops | `src/lib/zip-client.ts` |
+| Admin screens | `src/app/admin/` |
+| Client gallery and film review | `src/app/p/[slug]/` |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Files in R2 live under `p/<projectId>/…`, which is how every request is checked against its project.
 
-## Learn More
+## Not built yet
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Moving archived projects to cheaper storage and offering a single archive ZIP on request
+- Watermarked previews burned into the image (NDA mode currently uses a notice and blocks right-click)
+- Embedding the licence and credit in each file's metadata
+- Email notifications when a client picks, comments or approves
+- Accounts for other photographers (needed before selling it as a product)
