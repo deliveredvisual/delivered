@@ -10,7 +10,9 @@ import { InviteClient } from "./invite-client";
 import { and, desc, eq, ne, notInArray, sql } from "drizzle-orm";
 import { db } from "@/lib/env";
 import { memberships, orgDeliveries, projects as projectsTable, studios as studiosTable, users } from "@/db/schema";
-import { describeEvent, getProjectFull, picksFor, recentEvents } from "@/lib/queries";
+import { getProjectFull, picksFor } from "@/lib/queries";
+import { HistoryPanel } from "@/components/history-panel";
+import { TabRow } from "@/components/tab-scroll";
 import { daysLeft, formatBytes, formatDate, formatTimecode, plural, timeAgo } from "@/lib/format";
 import { fileUrl } from "@/lib/urls";
 import {
@@ -36,15 +38,31 @@ import { ConfirmButton } from "../../confirm-button";
 
 export const metadata: Metadata = { title: "Project" };
 
-export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[id]">) {
+const TABS = [
+  { id: "photos", label: "Photos" },
+  { id: "films", label: "Films" },
+  { id: "clients", label: "Clients" },
+  { id: "landing", label: "Landing page" },
+  { id: "history", label: "History" },
+  { id: "settings", label: "Settings" },
+] as const;
+type Tab = (typeof TABS)[number]["id"];
+
+/**
+ * One project, split into tabs so each part has its own page (and phones aren't faced with one endless scroll):
+ * Photos, Films, Clients (who can see it), Landing page, History (every change by you or the client), Settings.
+ */
+export default async function ProjectAdminPage({ params, searchParams }: PageProps<"/admin/p/[id]">) {
   const { id } = await params;
-  await requireProject(id);
+  const sp = await searchParams;
+  const tab: Tab = TABS.find((x) => x.id === sp.tab)?.id ?? "photos";
+  const { s } = await requireProject(id);
   const full = await getProjectFull(id);
   if (!full) notFound();
   const { project: p, sets, photos, films } = full;
-  const [picks, activity, clientFolders, studio] = await Promise.all([picksFor(p.id), recentEvents(p.id), loadClientFolders(p.id), studioFor(p)]);
+  const [picks, clientFolders, studio] = await Promise.all([picksFor(p.id), loadClientFolders(p.id), studioFor(p)]);
 
-  // Client organisations with this delivery, and people at organisations this studio has delivered to before.
+  // Client organisations with this delivery.
   const withAccess = await db()
     .select({
       id: studiosTable.id,
@@ -57,21 +75,6 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
     .innerJoin(studiosTable, eq(studiosTable.id, orgDeliveries.orgId))
     .where(eq(orgDeliveries.projectId, p.id))
     .orderBy(desc(orgDeliveries.savedAt));
-  const known = await db()
-    .selectDistinct({ email: users.email, name: users.name, company: studiosTable.name })
-    .from(orgDeliveries)
-    .innerJoin(projectsTable, eq(projectsTable.id, orgDeliveries.projectId))
-    .innerJoin(memberships, eq(memberships.studioId, orgDeliveries.orgId))
-    .innerJoin(users, eq(users.id, memberships.userId))
-    .innerJoin(studiosTable, eq(studiosTable.id, orgDeliveries.orgId))
-    .where(
-      and(
-        eq(projectsTable.studioId, p.studioId),
-        ne(orgDeliveries.projectId, p.id),
-        withAccess.length ? notInArray(orgDeliveries.orgId, withAccess.map((o) => o.id)) : undefined,
-      ),
-    )
-    .limit(200);
 
   const h = await headers();
   const proto = h.get("x-forwarded-proto") ?? "https";
@@ -83,53 +86,266 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
   const pickCount = new Map<string, number>();
   for (const k of picks) pickCount.set(k.photoId, (pickCount.get(k.photoId) ?? 0) + 1);
   const pickers = [...new Set(picks.map((k) => k.viewer))];
-  const photoBytes = photos.reduce((s, x) => s + x.size + x.rawSize, 0);
+  const photoBytes = photos.reduce((sum, x) => sum + x.size + x.rawSize, 0);
   const rawCount = photos.filter((x) => x.rawKey).length;
+  const counts: Partial<Record<Tab, number>> = { photos: photos.length, films: films.length, clients: withAccess.length };
 
   return (
     <ClientShell slug={p.slug} viewer={studio.name} isStudio newTabLinks>
-    <main className="wrap stack" style={{ paddingTop: 40, gap: 48 }}>
+    <main className="wrap stack" style={{ paddingTop: 32, gap: 28 }}>
       {/* Header */}
-      <section className="stack" style={{ gap: 14 }}>
-        <Link href="/admin" className="small muted" style={{ textDecoration: "none" }}>← Projects</Link>
+      <section className="stack" style={{ gap: 12 }}>
+        <Link href="/admin" className="small muted back-link">← Projects</Link>
         <div className="eyebrow">{[p.clientName, p.category].filter(Boolean).join(" · ") || "No client set"}</div>
         <h1 className="h1">{p.title}</h1>
         <div className="meta">
           {p.shotDate ? <span>Shot {formatDate(p.shotDate)}</span> : null}
-          <span>{plural(photos.length, "photo")} · {plural(films.length, "film")}</span>
-          <span>{formatBytes(photoBytes + films.reduce((s, f) => s + f.versions.reduce((a, v) => a + v.size, 0), 0))}</span>
-          <span className={expired ? "warn" : left <= 30 ? "warn" : ""}>
-            {expired ? "Archived — clients can't open it" : `Live until ${formatDate(p.expiresAt)} (${plural(left, "day")})`}
+          <span>{plural(photos.length, "photo")} · {plural(films.length, "film")} · {formatBytes(photoBytes + films.reduce((sum, f) => sum + f.versions.reduce((a, v) => a + v.size, 0), 0))}</span>
+          <span className={expired || left <= 30 ? "warn" : ""}>
+            {expired ? "Archived: clients can't open it" : `Live until ${formatDate(p.expiresAt)} (${plural(left, "day")})`}
           </span>
           {p.nda ? <span className="badge">NDA</span> : null}
         </div>
+        <div className="share-bar">
+          <CopyLink url={link} />
+          <a className="btn" href={`/p/${p.slug}`} target="_blank" rel="noreferrer">Open as client ↗</a>
+        </div>
+        <span className="small muted">{p.passwordHash ? "Password protected." : "No password: anyone with the link can open it."}</span>
       </section>
 
-      {/* Share */}
-      <section className="panel stack">
-        <div className="row between">
-          <h2 className="h3">Client link</h2>
-          <div className="row small">
-            <span className={p.passwordHash ? "" : "muted"}>{p.passwordHash ? "Password protected" : "No password — the link alone opens it"}</span>
+      <TabRow className="page-tabs" label="Project">
+        {TABS.map((x) => (
+          <Link key={x.id} href={x.id === "photos" ? `/admin/p/${p.id}` : `/admin/p/${p.id}?tab=${x.id}`} className="tab" aria-current={tab === x.id} scroll={false} replace>
+            {x.label}
+            {counts[x.id] ? <span className="count">{counts[x.id]}</span> : null}
+          </Link>
+        ))}
+      </TabRow>
+
+      {tab === "photos" ? (
+        <section className="stack" style={{ gap: 20 }}>
+          <div className="panel stack">
+            <div className="row between">
+              <h2 className="h3">Folders</h2>
+              <span className="small muted">Clients see these as tabs, and as sections on the landing page.</span>
+            </div>
+            <div className="stack" style={{ gap: 8 }}>
+              {sets.map((x) => (
+                <form key={x.id} action={renameSet.bind(null, p.id, x.id)} className="folder-row">
+                  <input name="name" defaultValue={x.name} className="input input-small" aria-label={`Rename ${x.name}`} />
+                  <button type="submit" className="btn btn-small">Rename</button>
+                  <button type="submit" formAction={deleteSet.bind(null, p.id, x.id)} className="btn btn-small btn-danger" aria-label={`Delete folder ${x.name}`}>Delete</button>
+                </form>
+              ))}
+              <form action={addSet.bind(null, p.id)} className="folder-row">
+                <input name="name" className="input input-small" placeholder="New folder, e.g. Details" aria-label="New folder name" />
+                <button type="submit" className="btn btn-small">Add folder</button>
+              </form>
+            </div>
           </div>
-        </div>
-        <CopyLink url={link} />
-        <div className="row">
-          <a className="btn btn-small" href={`/p/${p.slug}`} target="_blank" rel="noreferrer">Open as client</a>
-        </div>
-      </section>
 
-      {/* Clients with accounts */}
-      <section className="panel stack">
-        <div className="row between">
-          <h2 className="h3">Clients</h2>
-          <span className="small muted">Everyone at an added organisation sees it on their dashboard, without the link or password.</span>
-        </div>
+          <PhotoUploader projectId={p.id} sets={sets.map((x) => ({ id: x.id, name: x.name }))} />
+
+          <p className="small muted" style={{ margin: 0 }}>
+            {plural(photos.length, "photo")}{rawCount ? ` · ${rawCount} with RAW` : ""}
+            {pickers.length ? ` · selects from ${pickers.join(", ")}` : ""}
+          </p>
+
+          <PhotoManager
+            key={`${photos.length}-${photos.map((x) => x.setId ?? "").join("").length}-${photos.at(-1)?.id ?? ""}`}
+            projectId={p.id}
+            sets={sets.map((x) => ({ id: x.id, name: x.name }))}
+            photos={photos.map((x) => ({
+              id: x.id,
+              filename: x.filename,
+              setId: x.setId,
+              thumbKey: x.thumbKey,
+              rawKey: x.rawKey,
+              originalKey: x.originalKey,
+              size: x.size,
+              rawSize: x.rawSize,
+              picks: pickCount.get(x.id) ?? 0,
+              createdAt: x.createdAt.getTime(),
+            }))}
+            clientFolders={clientFolders}
+          />
+          {clientFolders.length ? (
+            <p className="small muted" style={{ margin: 0 }}>
+              Your client has made {clientFolders.length === 1 ? "a folder" : `${clientFolders.length} folders`}: {clientFolders.map((f) => `${f.name} (${f.photoIds.length})`).join(", ")}. Use the filters above to see what&rsquo;s in them.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {tab === "films" ? (
+        <section className="stack" style={{ gap: 20 }}>
+          {films.length === 0 ? <p className="muted small" style={{ margin: 0 }}>No films yet. Add one below, then upload the file. Each new upload becomes the next version (v1, v2…).</p> : null}
+          {films.map((f) => (
+            <div key={f.id} className="panel stack">
+              <div className="film-head">
+                <div className="film-thumb">
+                  {f.current?.posterKey ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={fileUrl(f.current.posterKey)} alt="" />
+                  ) : null}
+                </div>
+                <div className="stack" style={{ gap: 4, minWidth: 0 }}>
+                  <strong style={{ fontWeight: 500, fontSize: 16 }}>{f.title}</strong>
+                  <span className="small muted">
+                    {f.aspect}
+                    {f.current?.duration ? ` · ${formatTimecode(f.current.duration)}` : ""}
+                    {f.current ? ` · v${f.current.version}` : " · no upload yet"}
+                    {f.current?.approvedAt ? ` · approved by ${f.current.approvedBy}` : ""}
+                    {f.openComments ? ` · ${plural(f.openComments, "open comment")}` : ""}
+                  </span>
+                  <div className="row" style={{ marginTop: 6 }}>
+                    {f.current ? <a className="btn btn-small" href={`/p/${p.slug}/film/${f.id}`} target="_blank" rel="noreferrer">Review</a> : null}
+                    <FilmUploader projectId={p.id} filmId={f.id} nextVersion={(f.versions.at(-1)?.version ?? 0) + 1} />
+                  </div>
+                </div>
+              </div>
+              {f.versions.length ? (
+                <div className="stack" style={{ gap: 6 }}>
+                  {f.versions.map((v) => (
+                    <div key={v.id} className="row between small" style={{ borderTop: "1px solid var(--line)", paddingTop: 8 }}>
+                      <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                        <strong>v{v.version}</strong> <span className="mono muted">{v.filename}</span> · {formatBytes(v.size)} · {formatDate(v.createdAt)}
+                        {v.approvedAt ? <span className="good"> · approved</span> : null}
+                      </span>
+                      <form action={deleteVersion.bind(null, p.id, v.id)}>
+                        <ConfirmButton message={`Delete v${v.version} and its comments?`}>Delete v{v.version}</ConfirmButton>
+                      </form>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <form action={deleteFilm.bind(null, p.id, f.id)}>
+                <ConfirmButton message={`Delete "${f.title}", every version and all comments?`}>Delete film</ConfirmButton>
+              </form>
+            </div>
+          ))}
+          <form action={addFilm.bind(null, p.id)} className="panel add-film">
+            <input name="title" className="input" placeholder="Film title, e.g. Launch film" aria-label="Film title" required />
+            <select name="aspect" className="select" aria-label="Aspect ratio">
+              <option>16:9</option>
+              <option>9:16</option>
+              <option>4:5</option>
+              <option>1:1</option>
+              <option>2.39:1</option>
+            </select>
+            <button type="submit" className="btn">Add film</button>
+          </form>
+        </section>
+      ) : null}
+
+      {tab === "clients" ? <ClientsTab projectId={p.id} studioId={p.studioId} hasPassword={!!p.passwordHash} withAccess={withAccess} /> : null}
+
+      {tab === "landing" ? (
+        <section className="stack" style={{ gap: 20 }}>
+          <div className="row between" style={{ alignItems: "baseline" }}>
+            <p className="muted small" style={{ margin: 0, maxWidth: 640 }}>
+              The first thing your client sees when they open the link: the cover, your note, films pinned at the top, then every photo.
+            </p>
+            <a className="small" href={`/p/${p.slug}`} target="_blank" rel="noreferrer">Preview as client ↗</a>
+          </div>
+          <LandingForm
+            projectId={p.id}
+            settings={{ layout: p.landingLayout, bg: p.landingBg, coverId: p.landingCoverId, intro: p.landingIntro, spacing: p.landingSpacing, groupFolders: p.landingGroupFolders, titleOnCover: p.landingTitleOnCover, coverDim: p.landingCoverDim }}
+            title={p.title}
+            date={formatDate(p.shotDate ?? p.createdAt.toISOString().slice(0, 10))}
+            photos={photos.filter((x) => x.thumbKey).map((x) => ({ id: x.id, filename: x.filename, thumbKey: x.thumbKey }))}
+          />
+        </section>
+      ) : null}
+
+      {tab === "history" ? (
+        <section className="stack" style={{ gap: 12 }}>
+          <p className="muted small" style={{ margin: 0, maxWidth: 640 }}>
+            Everything that has happened on this delivery: what you and your team changed, and what your client did.
+          </p>
+          <HistoryPanel
+            studioId={s.studio.id}
+            projectId={p.id}
+            base={`/admin/p/${p.id}?tab=history`}
+            side={typeof sp.side === "string" ? sp.side : undefined}
+            before={typeof sp.before === "string" ? sp.before : undefined}
+          />
+        </section>
+      ) : null}
+
+      {tab === "settings" ? (
+        <>
+          <section className="stack" style={{ gap: 20, maxWidth: 900 }}>
+            <ProjectForm action={updateProject.bind(null, p.id)} project={p} submitLabel="Save changes" />
+          </section>
+          <section className="panel stack">
+            <h2 className="h3">Delivery window</h2>
+            <p className="small muted" style={{ margin: 0 }}>
+              {expired ? "Archived: clients can't open it." : `Live until ${formatDate(p.expiresAt)}, then archived automatically.`}
+            </p>
+            <div className="row">
+              <form action={extendProject.bind(null, p.id, 30)}><button type="submit" className="btn btn-small">Extend 30 days</button></form>
+              <form action={extendProject.bind(null, p.id, 365)}><button type="submit" className="btn btn-small">Extend a year</button></form>
+              <form action={setArchived.bind(null, p.id, !p.archived)}>
+                <button type="submit" className="btn btn-small">{p.archived ? "Restore (live for 30 days)" : "Archive now"}</button>
+              </form>
+            </div>
+          </section>
+          <section className="panel stack">
+            <h2 className="h3">Danger zone</h2>
+            <div className="row">
+              <form action={newLink.bind(null, p.id)}><ConfirmButton className="btn btn-small" message="Make a new link? The current link will stop working for your client.">Make a new link (old one stops working)</ConfirmButton></form>
+              <form action={deleteProject.bind(null, p.id)}>
+                <ConfirmButton message={`Delete "${p.title}" and every file in it? This can't be undone.`}>Delete project and all its files</ConfirmButton>
+              </form>
+            </div>
+          </section>
+        </>
+      ) : null}
+    </main>
+    </ClientShell>
+  );
+}
+
+/** Who can see this delivery: client organisations added by email, plus suggestions from past deliveries. */
+async function ClientsTab({
+  projectId,
+  studioId,
+  hasPassword,
+  withAccess,
+}: {
+  projectId: string;
+  studioId: string;
+  hasPassword: boolean;
+  withAccess: { id: string; name: string; addedBy: string | null; openedAt: Date | null; people: number }[];
+}) {
+  const known = await db()
+    .selectDistinct({ email: users.email, name: users.name, company: studiosTable.name })
+    .from(orgDeliveries)
+    .innerJoin(projectsTable, eq(projectsTable.id, orgDeliveries.projectId))
+    .innerJoin(memberships, eq(memberships.studioId, orgDeliveries.orgId))
+    .innerJoin(users, eq(users.id, memberships.userId))
+    .innerJoin(studiosTable, eq(studiosTable.id, orgDeliveries.orgId))
+    .where(
+      and(
+        eq(projectsTable.studioId, studioId),
+        ne(orgDeliveries.projectId, projectId),
+        withAccess.length ? notInArray(orgDeliveries.orgId, withAccess.map((o) => o.id)) : undefined,
+      ),
+    )
+    .limit(200);
+  return (
+    <section className="stack" style={{ gap: 20 }}>
+      <p className="muted small" style={{ margin: 0, maxWidth: 640 }}>
+        Add a client by email and everyone at their organisation sees this delivery on their dashboard, without the link or password.
+        You can also just send them the link above.
+      </p>
+      <div className="panel stack">
         {withAccess.length ? (
           <ul className="stack" style={{ listStyle: "none", margin: 0, padding: 0, gap: 0 }}>
             {withAccess.map((o) => (
-              <li key={o.id} className="row between" style={{ borderTop: "1px solid var(--line)", padding: "10px 0" }}>
-                <span className="stack" style={{ gap: 2 }}>
+              <li key={o.id} className="row between" style={{ borderBottom: "1px solid var(--line)", padding: "10px 0" }}>
+                <span className="stack" style={{ gap: 2, minWidth: 0 }}>
                   <span style={{ fontWeight: 500 }}>
                     {o.name} <span className="muted" style={{ fontWeight: 400 }}>· {plural(Number(o.people), "person", "people")}</span>
                   </span>
@@ -139,192 +355,17 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
                     {o.openedAt ? `last opened ${timeAgo(o.openedAt)}` : "not opened yet"}
                   </span>
                 </span>
-                <form action={removeClientAccess.bind(null, p.id, o.id)}>
-                  <ConfirmButton message={`Remove ${o.name}? It comes off their dashboard.${p.passwordHash ? "" : " The link itself still opens it, since this delivery has no password."}`}>Remove</ConfirmButton>
+                <form action={removeClientAccess.bind(null, projectId, o.id)}>
+                  <ConfirmButton message={`Remove ${o.name}? It comes off their dashboard.${hasPassword ? "" : " The link itself still opens it, since this delivery has no password."}`}>Remove</ConfirmButton>
                 </form>
               </li>
             ))}
           </ul>
-        ) : null}
-        <InviteClient projectId={p.id} known={known} />
-      </section>
-
-      {/* Photos */}
-      <section className="stack" style={{ gap: 20 }}>
-        <div className="row between">
-          <h2 className="h2">Photos</h2>
-          <span className="small muted">
-            {plural(photos.length, "photo")}{rawCount ? ` · ${rawCount} with RAW` : ""}
-            {pickers.length ? ` · picks from ${pickers.join(", ")}` : ""}
-          </span>
-        </div>
-
-        <div className="panel stack">
-          <div className="row between">
-            <h3 className="h3">Folders</h3>
-            <span className="small muted">Clients see these as tabs, and as sections on the landing page.</span>
-          </div>
-          <div className="row" style={{ gap: 8 }}>
-            {sets.map((s) => (
-              <form key={s.id} action={renameSet.bind(null, p.id, s.id)} className="row" style={{ gap: 4 }}>
-                <input name="name" defaultValue={s.name} className="input" style={{ width: 170, minHeight: 34, padding: "4px 8px" }} aria-label={`Rename ${s.name}`} />
-                <button type="submit" className="btn btn-small">Rename</button>
-                <button type="submit" formAction={deleteSet.bind(null, p.id, s.id)} className="btn btn-small btn-danger" aria-label={`Delete folder ${s.name}`}>×</button>
-              </form>
-            ))}
-          </div>
-          <form action={addSet.bind(null, p.id)} className="row" style={{ gap: 6 }}>
-            <input name="name" className="input" placeholder="New folder, e.g. Details" style={{ width: 240, minHeight: 34, padding: "4px 8px" }} aria-label="New folder name" />
-            <button type="submit" className="btn btn-small">Add folder</button>
-          </form>
-        </div>
-
-        <PhotoUploader projectId={p.id} sets={sets.map((s) => ({ id: s.id, name: s.name }))} />
-
-        <PhotoManager
-          key={`${photos.length}-${photos.map((x) => x.setId ?? "").join("").length}-${photos.at(-1)?.id ?? ""}`}
-          projectId={p.id}
-          sets={sets.map((s) => ({ id: s.id, name: s.name }))}
-          photos={photos.map((x) => ({
-            id: x.id,
-            filename: x.filename,
-            setId: x.setId,
-            thumbKey: x.thumbKey,
-            rawKey: x.rawKey,
-            originalKey: x.originalKey,
-            size: x.size,
-            rawSize: x.rawSize,
-            picks: pickCount.get(x.id) ?? 0,
-            createdAt: x.createdAt.getTime(),
-          }))}
-          clientFolders={clientFolders}
-        />
-        {clientFolders.length ? (
-          <p className="small muted" style={{ margin: 0 }}>
-            Your client has made {clientFolders.length === 1 ? "a folder" : `${clientFolders.length} folders`}: {clientFolders.map((f) => `${f.name} (${f.photoIds.length})`).join(", ")}. Use the filters above to see what&rsquo;s in them.
-          </p>
-        ) : null}
-      </section>
-
-      {/* Films */}
-      <section className="stack" style={{ gap: 20 }}>
-        <h2 className="h2">Films</h2>
-        {films.map((f) => (
-          <div key={f.id} className="panel stack">
-            <div className="row between">
-              <div className="row" style={{ gap: 16 }}>
-                <div className="film-thumb" style={{ width: 120 }}>
-                  {f.current?.posterKey ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={fileUrl(f.current.posterKey)} alt="" />
-                  ) : null}
-                </div>
-                <div className="stack" style={{ gap: 4 }}>
-                  <strong style={{ fontWeight: 500, fontSize: 16 }}>{f.title}</strong>
-                  <span className="small muted">
-                    {f.aspect}
-                    {f.current?.duration ? ` · ${formatTimecode(f.current.duration)}` : ""}
-                    {f.current ? ` · v${f.current.version}` : " · no upload yet"}
-                    {f.current?.approvedAt ? ` · approved by ${f.current.approvedBy}` : ""}
-                    {f.openComments ? ` · ${plural(f.openComments, "open comment")}` : ""}
-                  </span>
-                </div>
-              </div>
-              <div className="row">
-                {f.current ? <a className="btn btn-small" href={`/p/${p.slug}/film/${f.id}`} target="_blank" rel="noreferrer">Review</a> : null}
-                <FilmUploader projectId={p.id} filmId={f.id} nextVersion={(f.versions.at(-1)?.version ?? 0) + 1} />
-              </div>
-            </div>
-            {f.versions.length ? (
-              <div className="stack" style={{ gap: 6 }}>
-                {f.versions.map((v) => (
-                  <div key={v.id} className="row between small" style={{ borderTop: "1px solid var(--line)", paddingTop: 8 }}>
-                    <span>
-                      <strong>v{v.version}</strong> <span className="mono muted">{v.filename}</span> · {formatBytes(v.size)} · {formatDate(v.createdAt)}
-                      {v.approvedAt ? <span className="good"> · approved</span> : null}
-                    </span>
-                    <form action={deleteVersion.bind(null, p.id, v.id)}>
-                      <ConfirmButton message={`Delete v${v.version} and its comments?`}>Delete v{v.version}</ConfirmButton>
-                    </form>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            <form action={deleteFilm.bind(null, p.id, f.id)}>
-              <ConfirmButton message={`Delete "${f.title}", every version and all comments?`}>Delete film</ConfirmButton>
-            </form>
-          </div>
-        ))}
-        <form action={addFilm.bind(null, p.id)} className="row panel">
-          <input name="title" className="input" placeholder="Film title, e.g. Launch film" style={{ width: 280 }} aria-label="Film title" required />
-          <select name="aspect" className="select" style={{ width: "auto" }} aria-label="Aspect ratio">
-            <option>16:9</option>
-            <option>9:16</option>
-            <option>4:5</option>
-            <option>1:1</option>
-            <option>2.39:1</option>
-          </select>
-          <button type="submit" className="btn">Add film</button>
-        </form>
-      </section>
-
-      {/* Landing page */}
-      <section className="stack" style={{ gap: 20 }}>
-        <div className="row between" style={{ alignItems: "baseline" }}>
-          <h2 className="h2">Landing page</h2>
-          <a className="small" href={`/p/${p.slug}`} target="_blank" rel="noreferrer">Preview as client ↗</a>
-        </div>
-        <p className="muted small" style={{ margin: 0, maxWidth: 640 }}>
-          The first thing your client sees when they open the link: the cover, your note, films pinned at the top, then every photo.
-        </p>
-        <LandingForm
-          projectId={p.id}
-          settings={{ layout: p.landingLayout, bg: p.landingBg, coverId: p.landingCoverId, intro: p.landingIntro, spacing: p.landingSpacing, groupFolders: p.landingGroupFolders, titleOnCover: p.landingTitleOnCover, coverDim: p.landingCoverDim }}
-          title={p.title}
-          date={formatDate(p.shotDate ?? p.createdAt.toISOString().slice(0, 10))}
-          photos={photos.filter((x) => x.thumbKey).map((x) => ({ id: x.id, filename: x.filename, thumbKey: x.thumbKey }))}
-        />
-      </section>
-
-      {/* Activity */}
-      <section className="stack">
-        <h2 className="h2">Activity</h2>
-        {activity.length ? (
-          <ul className="stack" style={{ listStyle: "none", margin: 0, padding: 0, gap: 8 }}>
-            {activity.map((e) => (
-              <li key={e.id} className="row between small" style={{ borderTop: "1px solid var(--line)", paddingTop: 8 }}>
-                <span>{describeEvent(e)}</span>
-                <span className="muted">{timeAgo(e.createdAt)}</span>
-              </li>
-            ))}
-          </ul>
         ) : (
-          <p className="muted small">Nothing yet. You’ll see views, picks, comments and downloads here.</p>
+          <p className="small muted" style={{ margin: 0 }}>No client organisations added yet.</p>
         )}
-      </section>
-
-      {/* Settings */}
-      <section className="stack" style={{ gap: 20, maxWidth: 900 }}>
-        <h2 className="h2">Settings</h2>
-        <ProjectForm action={updateProject.bind(null, p.id)} project={p} submitLabel="Save changes" />
-      </section>
-
-      {/* Lifecycle */}
-      <section className="panel stack">
-        <h2 className="h3">Delivery window</h2>
-        <div className="row">
-          <form action={extendProject.bind(null, p.id, 30)}><button type="submit" className="btn btn-small">Extend 30 days</button></form>
-          <form action={extendProject.bind(null, p.id, 365)}><button type="submit" className="btn btn-small">Extend a year</button></form>
-          <form action={setArchived.bind(null, p.id, !p.archived)}>
-            <button type="submit" className="btn btn-small">{p.archived ? "Restore (live for 30 days)" : "Archive now"}</button>
-          </form>
-          <form action={newLink.bind(null, p.id)}><ConfirmButton className="btn btn-small" message="Make a new link? The current link will stop working for your client.">Make a new link (old one stops working)</ConfirmButton></form>
-        </div>
-        <form action={deleteProject.bind(null, p.id)}>
-          <ConfirmButton message={`Delete "${p.title}" and every file in it? This can't be undone.`}>Delete project and all its files</ConfirmButton>
-        </form>
-      </section>
-    </main>
-    </ClientShell>
+        <InviteClient projectId={projectId} known={known} />
+      </div>
+    </section>
   );
 }

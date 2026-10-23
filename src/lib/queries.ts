@@ -1,8 +1,7 @@
 import "server-only";
-import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "./env";
 import { comments, events, films, filmVersions, photos, picks, projects, sets } from "@/db/schema";
-import { newId } from "./crypto";
 
 export type ProjectSummary = Awaited<ReturnType<typeof listProjects>>[number];
 
@@ -21,7 +20,7 @@ export async function listProjects(studioId: string) {
     .orderBy(desc(projects.createdAt));
 
   const latest = await d
-    .select({ projectId: events.projectId, viewer: events.viewer, action: events.action, detail: events.detail, createdAt: events.createdAt })
+    .select({ projectId: events.projectId, viewer: events.viewer, action: events.action, detail: events.detail, count: events.count, createdAt: events.createdAt })
     .from(events)
     .where(
       and(
@@ -70,58 +69,4 @@ export async function picksFor(projectId: string) {
   return db().select().from(picks).where(eq(picks.projectId, projectId));
 }
 
-export async function recentEvents(projectId: string, limit = 30) {
-  return db()
-    .select()
-    .from(events)
-    .where(eq(events.projectId, projectId))
-    .orderBy(desc(events.createdAt))
-    .limit(limit);
-}
-
-export async function logEvent(projectId: string, viewer: string, action: string, detail = "") {
-  await db()
-    .insert(events)
-    .values({ id: newId(), projectId, viewer, action, detail, createdAt: new Date() });
-}
-
-/** Logs a view at most once an hour per person. */
-export async function logView(projectId: string, viewer: string) {
-  const recent = await db()
-    .select({ id: events.id })
-    .from(events)
-    .where(and(eq(events.projectId, projectId), eq(events.action, "view"), eq(events.viewer, viewer), gt(events.createdAt, new Date(Date.now() - 3600_000))))
-    .limit(1);
-  if (!recent.length) await logEvent(projectId, viewer, "view");
-}
-
-/** Human sentence for the activity feed. */
-export function describeEvent(e: { viewer: string; action: string; detail: string }): string {
-  const who = e.viewer || "Someone";
-  switch (e.action) {
-    case "view":
-      return `${who} opened the delivery`;
-    case "view_film":
-      return `${who} watched ${e.detail}`;
-    case "pick":
-      return `${who} picked ${e.detail}`;
-    case "unpick":
-      return `${who} removed ${e.detail} from selects`;
-    case "download":
-      return `${who} downloaded ${e.detail}`;
-    case "comment":
-      return `${who} commented on ${e.detail}`;
-    case "approve":
-      return `${who} approved ${e.detail}`;
-    case "invite":
-      return `${who} added ${e.detail} to this delivery`;
-    case "message":
-      return `${who} sent a message${e.detail ? `: “${e.detail}”` : ""}`;
-    case "folder":
-      return `${who} made a folder: ${e.detail}`;
-    case "unapprove":
-      return `${who} undid their approval of ${e.detail}`;
-    default:
-      return `${who}: ${e.action} ${e.detail}`.trim();
-  }
-}
+export { describeEvent, logEvent, logView } from "./history";

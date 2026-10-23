@@ -226,7 +226,7 @@ export function ClientShell({
       {children}
 
       <button type="button" className="chat-fab" onClick={openPanel} aria-label={`Messages${unread ? `, ${unread} new` : ""}`} hidden={open}>
-        <ChatIcon /> Messages
+        <ChatIcon /> <span className="chat-fab-label">Messages</span>
         {unread ? <span className="chat-badge">{unread}</span> : pins.length ? <span className="chat-badge muted-badge">{pins.length} pinned</span> : null}
       </button>
 

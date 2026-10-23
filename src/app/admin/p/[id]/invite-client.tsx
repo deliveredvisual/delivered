@@ -22,7 +22,7 @@ export function InviteClient({ projectId, known }: { projectId: string; known: {
           required
           style={{ maxWidth: 420 }}
         />
-        <button type="submit" className="btn" disabled={pending}>{pending ? "Adding…" : "Add to delivery"}</button>
+        <button type="submit" className="btn" disabled={pending}>{pending ? "Adding…" : "Add"}</button>
       </div>
       <datalist id="known-clients">
         {known.map((k) => (

@@ -4,6 +4,7 @@ import { fail, json, projectIdFromKey, studioProject } from "@/lib/api";
 import { db } from "@/lib/env";
 import { photos, sets } from "@/db/schema";
 import { newId } from "@/lib/crypto";
+import { logStudio } from "@/lib/history";
 
 type RegisterPhoto = {
   op: "photo";
@@ -86,6 +87,7 @@ export async function POST(request: Request): Promise<Response> {
         createdAt: new Date(),
       });
     }
+    await logStudio(project.id, "upload", body.filename.slice(0, 200));
     revalidatePath(`/admin/p/${project.id}`);
     return json({ ok: true });
   }
@@ -109,6 +111,7 @@ export async function POST(request: Request): Promise<Response> {
         createdAt: new Date(),
       });
     }
+    await logStudio(project.id, "upload_raw", body.filename.slice(0, 200));
     revalidatePath(`/admin/p/${project.id}`);
     return json({ ok: true, paired: !!match });
   }

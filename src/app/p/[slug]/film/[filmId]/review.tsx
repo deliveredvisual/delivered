@@ -133,7 +133,7 @@ export function Review(props: {
 
       <div className="row between" style={{ alignItems: "flex-end" }}>
         <div className="stack" style={{ gap: 8 }}>
-          <h1 className="h2" style={{ fontSize: 40 }}>{film.title}</h1>
+          <h1 className="h2 page-title">{film.title}</h1>
           <div className="small" style={{ color: "#4a4a4a" }}>
             {film.aspect}
             {total ? ` · ${formatTimecode(total)}` : ""} · {formatBytes(v.size)}

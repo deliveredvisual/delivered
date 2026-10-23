@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { fileUrl } from "@/lib/urls";
 import { formatTimecode } from "@/lib/format";
@@ -41,6 +41,7 @@ export function Landing(props: {
   const { slug, layout, photos, films, project, cover } = props;
   const { pin, openChat } = useShell();
   const [open, setOpen] = useState<number | null>(null);
+  const touchX = useRef<number | null>(null);
   const overlay = props.titleOnCover && !!cover;
   const noSave = props.nda ? { onContextMenu: (e: React.MouseEvent) => e.preventDefault(), draggable: false } : {};
 
@@ -134,7 +135,7 @@ export function Landing(props: {
             {project.meta.map((m) => <span key={m}>{m}</span>)}
           </div>
         </div>
-        <div className="row" style={{ gap: 10 }}>
+        <div className="row landing-actions" style={{ gap: 10 }}>
           <Link href={`/p/${slug}/gallery`} className="btn btn-primary">
             Select &amp; download
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
@@ -199,7 +200,7 @@ export function Landing(props: {
         </section>
       ) : null}
 
-      <footer className="landing-band row between small muted" style={{ paddingTop: 48, paddingBottom: 110 }}>
+      <footer className="landing-band landing-foot small muted" style={{ paddingTop: 48, paddingBottom: 110 }}>
         <span>{project.credit ? `Credit: ${project.credit}` : ""}</span>
         <span className="row" style={{ gap: 20 }}>
           <Link href={`/p/${slug}/gallery`}>Select &amp; download</Link>
@@ -210,16 +211,23 @@ export function Landing(props: {
       {current ? (
         <div className="lightbox" role="dialog" aria-modal="true" aria-label={current.filename}>
           <div className="lightbox-top">
-            <span className="mono" style={{ color: "#ccc" }}>{current.filename} · {open! + 1} / {order.length}</span>
-            <div className="row">
-              <button type="button" className="lb-btn" onClick={() => pinPhoto(current)}><PinIcon /> Pin</button>
-              <Link className="lb-btn" href={`/p/${slug}/gallery?photo=${current.id}`}>Select &amp; download</Link>
-              <button type="button" className="lb-btn" onClick={() => setOpen(null)} aria-label="Close">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
-              </button>
-            </div>
+            <span className="mono lb-name">{current.filename} · {open! + 1} / {order.length}</span>
+            <button type="button" className="lb-btn" onClick={() => setOpen(null)} aria-label="Close">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
           </div>
-          <div className="lightbox-stage">
+          <div
+            className="lightbox-stage"
+            onTouchStart={(e) => { touchX.current = e.touches[0].clientX; }}
+            onTouchEnd={(e) => {
+              const start = touchX.current;
+              touchX.current = null;
+              if (start === null) return;
+              const dx = e.changedTouches[0].clientX - start;
+              if (dx < -50 && open! < order.length - 1) setOpen(open! + 1);
+              else if (dx > 50 && open! > 0) setOpen(open! - 1);
+            }}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={fileUrl(current.previewKey ?? current.thumbKey)} alt={current.filename} {...noSave} />
             {open! > 0 ? (
@@ -233,9 +241,12 @@ export function Landing(props: {
               </button>
             ) : null}
           </div>
-          <div className="lightbox-bottom small" style={{ color: "#aaa" }}>
-            <span>← → to move · Esc to close</span>
-            {props.nda ? <span>Confidential</span> : null}
+          <div className="lightbox-bottom">
+            <div className="lb-actions">
+              <button type="button" className="lb-btn" onClick={() => pinPhoto(current)}><PinIcon /> Pin</button>
+              <Link className="lb-btn" href={`/p/${slug}/gallery?photo=${current.id}`}>Select &amp; download</Link>
+            </div>
+            <span className="small lb-hint">← → to move · Esc to close{props.nda ? " · Confidential" : ""}</span>
           </div>
         </div>
       ) : null}

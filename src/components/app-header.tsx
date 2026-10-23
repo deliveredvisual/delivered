@@ -1,45 +1,41 @@
 import Link from "next/link";
 import { isSiteOwner, type StudioSession } from "@/lib/auth";
 import { logout } from "@/app/login/actions";
+import { HeaderLinks } from "./header-links";
 
-type View = "creative" | "client" | "team" | "studios";
+type View = "creative" | "client" | "team";
 
 /**
- * The header on every signed-in page: a switch between the Creative dashboard (deliveries you send) and the
- * Client dashboard (deliveries sent to you), the links for the current one, and who you are.
+ * The header on every signed-in page. Organisations with both dashboards get a switch between Creative (deliveries
+ * you send) and Client (deliveries sent to you); everyone else just sees their own links. The other dashboard is
+ * turned on from the Team page.
  */
 export async function AppHeader({ s, view }: { s: StudioSession; view: View }) {
   const siteOwner = await isSiteOwner();
   const { studio: org, user } = s;
-  const side = view === "client" ? "client" : view === "creative" ? "creative" : null;
+  const side = view === "client" ? "client" : view === "team" ? null : "creative";
+  const both = org.creative && org.client;
+  const links: { href: string; label: string }[] = [];
+  if (org.creative && side !== "client") links.push({ href: "/admin", label: "Projects" }, { href: "/admin/history", label: "History" });
+  if (org.client && (side === "client" || !org.creative)) links.push({ href: "/me", label: "Deliveries" });
+  links.push({ href: "/team", label: "Team" });
+  if (siteOwner) links.push({ href: "/admin/studios", label: "Approvals" });
   return (
-    <header className="topbar" style={{ paddingTop: 16, paddingBottom: 16 }}>
-      <div className="row" style={{ gap: 24 }}>
-        <Link href="/" className="wordmark">
-          Delivered <span className="light">Visual</span>
-        </Link>
-        <nav className="switcher" aria-label="Dashboard">
-          <Link href={org.creative ? "/admin" : "/team#dashboards"} aria-current={side === "creative" ? "page" : undefined} className={org.creative ? "" : "off"}>
-            {org.creative ? "Creative" : "+ Creative"}
-          </Link>
-          <Link href={org.client ? "/me" : "/team#dashboards"} aria-current={side === "client" ? "page" : undefined} className={org.client ? "" : "off"}>
-            {org.client ? "Client" : "+ Client"}
-          </Link>
-        </nav>
-        <nav className="nav" aria-label="Main">
-          {side === "creative" ? (
-            <>
-              <Link href="/admin">Projects</Link>
-              {org.status === "active" ? <Link href="/admin/new">New project</Link> : null}
-            </>
-          ) : null}
-          {side === "client" ? <Link href="/me">Deliveries</Link> : null}
-          <Link href="/team" aria-current={view === "team" ? "page" : undefined}>Team</Link>
-          {siteOwner ? <Link href="/admin/studios" aria-current={view === "studios" ? "page" : undefined}>Studios</Link> : null}
-        </nav>
+    <header className="appbar">
+      <Link href="/" className="wordmark">
+        Delivered <span className="light">Visual</span>
+      </Link>
+      <div className="appbar-nav">
+        {both ? (
+          <nav className="switcher" aria-label="Dashboard">
+            <Link href="/admin" aria-current={side === "creative" ? "page" : undefined}>Creative</Link>
+            <Link href="/me" aria-current={side === "client" ? "page" : undefined}>Client</Link>
+          </nav>
+        ) : null}
+        <HeaderLinks links={links} />
       </div>
-      <div className="row small">
-        <span className="muted">{user && user.name !== org.name ? `${user.name} · ${org.name}` : org.name}</span>
+      <div className="appbar-user small">
+        <span className="muted appbar-name">{user && user.name !== org.name ? `${user.name} · ${org.name}` : org.name}</span>
         <form action={logout}>
           <button type="submit" className="btn btn-small">Sign out</button>
         </form>

@@ -28,7 +28,7 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/admin">
   if (studio.status !== "active") {
     return (
       <main className="wrap stack" style={{ paddingTop: 48, gap: 20, maxWidth: 640 }}>
-        <h1 className="h2" style={{ fontSize: 40 }}>Welcome to Delivered Visual</h1>
+        <h1 className="h2 page-title">Welcome to Delivered Visual</h1>
         <div className="notice">
           Your studio, <strong>{studio.name}</strong>, is waiting for approval. You&rsquo;ll be able to create deliveries as soon as it&rsquo;s switched on.
         </div>
@@ -45,16 +45,16 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/admin">
   const rows = all.filter((p) => filter === "all" || status(p) === filter || (filter === "live" && status(p) === "soon"));
 
   return (
-    <main className="wrap stack" style={{ paddingTop: 48, gap: 28 }}>
+    <main className="wrap stack" style={{ paddingTop: 40, gap: 24 }}>
       <div className="row between" style={{ alignItems: "flex-end" }}>
-        <h1 className="h2" style={{ fontSize: 40 }}>Projects</h1>
+        <h1 className="h2 page-title">Projects</h1>
         <Link href="/admin/new" className="btn btn-primary">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
           New project
         </Link>
       </div>
 
-      <nav className="row" aria-label="Filter projects" style={{ gap: 6 }}>
+      <nav className="chips" aria-label="Filter projects">
         {FILTERS.map((f) => (
           <Link key={f.id} href={`/admin?f=${f.id}`} className="btn btn-small pill" aria-pressed={filter === f.id}>
             {f.label} · {counts[f.id]}
@@ -72,7 +72,7 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/admin">
         </div>
       ) : (
         <div className="table-box">
-          <table className="table">
+          <table className="table cards">
             <thead>
               <tr>
                 <th scope="col">Project</th>
@@ -92,22 +92,22 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/admin">
                   .join(" · ");
                 return (
                   <tr key={p.id}>
-                    <td>
+                    <td className="card-title">
                       <Link href={`/admin/p/${p.id}`} style={{ textDecoration: "none", fontWeight: 500, fontSize: 15 }}>
                         {p.title}
                       </Link>
                       <div className="small muted" style={{ marginTop: 4 }}>{p.clientName || "No client set"}</div>
                       {p.nda ? <div className="badge" style={{ marginTop: 8 }}>NDA · no sharing</div> : null}
                     </td>
-                    <td style={{ whiteSpace: "nowrap" }}>{formatDate(p.shotDate) || <span className="muted">—</span>}</td>
-                    <td>
+                    <td data-label="Shot" style={{ whiteSpace: "nowrap" }}>{formatDate(p.shotDate) || <span className="muted">—</span>}</td>
+                    <td data-label="Files">
                       {files || <span className="muted">Empty</span>}
                       <div className="mono muted" style={{ marginTop: 4 }}>{formatBytes(Number(r.photoBytes) + Number(r.filmBytes))}</div>
                     </td>
-                    <td style={{ whiteSpace: "nowrap" }} className={st === "soon" ? "warn" : st === "archived" ? "muted" : ""}>
+                    <td data-label="Live for" style={{ whiteSpace: "nowrap" }} className={st === "soon" ? "warn" : st === "archived" ? "muted" : ""}>
                       {st === "archived" ? "Archived" : plural(left, "day")}
                     </td>
-                    <td className="small" style={{ color: "var(--ink-2)" }}>
+                    <td data-label="Latest" className="small" style={{ color: "var(--ink-2)" }}>
                       {r.latest ? (
                         <>
                           {describeEvent(r.latest)}

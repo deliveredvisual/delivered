@@ -50,6 +50,13 @@
       "when": 1792735652329,
       "tag": "0006_cover_title",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1792737508032,
+      "tag": "0007_history",
+      "breakpoints": true
     }
   ]
 }

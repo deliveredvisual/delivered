@@ -39,7 +39,7 @@ export default async function TeamPage() {
     <>
       <AppHeader s={s} view="team" />
       <main className="wrap stack" style={{ paddingTop: 48, gap: 48, maxWidth: 900 }}>
-        <h1 className="h2" style={{ fontSize: 40 }}>{org.name}</h1>
+        <h1 className="h2 page-title">{org.name}</h1>
 
         {!user && !hasOwnerAccount ? (
           <section className="stack" style={{ gap: 16 }}>

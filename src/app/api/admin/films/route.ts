@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { fail, json, projectIdFromKey, studioProject } from "@/lib/api";
 import { db } from "@/lib/env";
 import { films, filmVersions } from "@/db/schema";
+import { logStudio } from "@/lib/history";
 
 type NewVersion = {
   projectId: string;
@@ -40,6 +41,7 @@ export async function POST(request: Request): Promise<Response> {
     duration: body.duration ? Math.round(body.duration) : null,
     createdAt: new Date(),
   });
+  await logStudio(film.projectId, "version", `${film.title} v${version}`);
   revalidatePath(`/admin/p/${film.projectId}`);
   return json({ ok: true, version });
 }

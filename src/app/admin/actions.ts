@@ -4,10 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { enableSide, normaliseEmail, requireActiveStudio, requireProject, validEmail } from "@/lib/auth";
-import { logEvent } from "@/lib/queries";
+import { logEvent, logStudio } from "@/lib/history";
 import { bucket, db } from "@/lib/env";
 import { hashPassword, newId, newSlug } from "@/lib/crypto";
-import { DAY, DELIVERY_DAYS } from "@/lib/format";
+import { DAY, DELIVERY_DAYS, formatDate, plural } from "@/lib/format";
 import { comments, films, filmVersions, memberships, orgDeliveries, photos, projects, sets, studios, users, type Project } from "@/db/schema";
 import { LANDING_LAYOUTS, LANDING_SPACING, validHex } from "@/lib/landing";
 
@@ -64,12 +64,28 @@ export async function createProject(_prev: FormState, form: FormData): Promise<F
       .insert(sets)
       .values(setNames.map((name, i) => ({ id: newId(), projectId: id, name, sort: i })));
   }
+  await logStudio(id, "create");
   revalidatePath("/admin");
   redirect(`/admin/p/${id}`);
 }
 
+/** Names of the settings that differ, in plain words, for the history. */
+const FIELD_NAMES: Record<string, string> = {
+  title: "title",
+  clientName: "client",
+  category: "type of work",
+  shotDate: "shot date",
+  nda: "NDA mode",
+  rawEnabled: "RAW downloads",
+  licenceUsage: "licence",
+  licenceTerritory: "licence",
+  licenceTerm: "licence",
+  licenceCredit: "licence",
+  licenceTerms: "licence",
+};
+
 export async function updateProject(projectId: string, _prev: FormState, form: FormData): Promise<FormState> {
-  await requireProject(projectId);
+  const { project: before } = await requireProject(projectId);
   const fields = projectFields(form);
   if (!fields.title) return { error: "Give the project a title." };
   const password = str(form, "password", 200);
@@ -78,6 +94,13 @@ export async function updateProject(projectId: string, _prev: FormState, form: F
   if (clearPassword) update.passwordHash = null;
   else if (password) update.passwordHash = await hashPassword(password);
   await db().update(projects).set(update).where(eq(projects.id, projectId));
+  const changed = new Set<string>();
+  for (const [k, v] of Object.entries(fields)) {
+    if ((before as Record<string, unknown>)[k] !== v && FIELD_NAMES[k]) changed.add(FIELD_NAMES[k]);
+  }
+  if (clearPassword && before.passwordHash) changed.add("password removed");
+  else if (password) changed.add(before.passwordHash ? "new password" : "password added");
+  if (changed.size) await logStudio(projectId, "edit", [...changed].join(", "));
   revalidatePath(`/admin/p/${projectId}`);
   revalidatePath("/admin");
   return { error: "" };
@@ -92,6 +115,7 @@ export async function setArchived(projectId: string, archived: boolean) {
     if (p && p.expiresAt.getTime() < Date.now() + 30 * DAY) update.expiresAt = new Date(Date.now() + 30 * DAY);
   }
   await db().update(projects).set(update).where(eq(projects.id, projectId));
+  await logStudio(projectId, archived ? "archive" : "restore", update.expiresAt ? `live until ${formatDate(update.expiresAt)}` : "");
   revalidatePath(`/admin/p/${projectId}`);
   revalidatePath("/admin");
 }
@@ -102,6 +126,8 @@ export async function extendProject(projectId: string, days: number) {
     .update(projects)
     .set({ expiresAt: sql`${projects.expiresAt} + ${days * DAY}` })
     .where(eq(projects.id, projectId));
+  const p = await db().query.projects.findFirst({ where: eq(projects.id, projectId) });
+  await logStudio(projectId, "extend", `${plural(days, "day")} more, live until ${p ? formatDate(p.expiresAt) : ""}`);
   revalidatePath(`/admin/p/${projectId}`);
   revalidatePath("/admin");
 }
@@ -109,6 +135,7 @@ export async function extendProject(projectId: string, days: number) {
 export async function newLink(projectId: string) {
   await requireProject(projectId);
   await db().update(projects).set({ slug: newSlug() }).where(eq(projects.id, projectId));
+  await logStudio(projectId, "relink");
   revalidatePath(`/admin/p/${projectId}`);
 }
 
@@ -161,14 +188,16 @@ export async function inviteClient(projectId: string, _prev: InviteState, form: 
   await db().insert(orgDeliveries).values({ orgId: org.id, projectId, savedAt: new Date(), addedBy: by });
   // Being sent a delivery switches on their client dashboard, so they can see it.
   if (!org.client) await enableSide(org.id, "client");
-  await logEvent(projectId, by, "invite", org.name);
+  await logEvent(projectId, by, "invite", org.name, { side: "studio" });
   revalidatePath(`/admin/p/${projectId}`);
   return { error: "", added: org.name };
 }
 
 export async function removeClientAccess(projectId: string, orgId: string) {
   await requireProject(projectId);
+  const org = await db().query.studios.findFirst({ where: eq(studios.id, orgId) });
   await db().delete(orgDeliveries).where(and(eq(orgDeliveries.projectId, projectId), eq(orgDeliveries.orgId, orgId)));
+  if (org) await logStudio(projectId, "uninvite", org.name);
   revalidatePath(`/admin/p/${projectId}`);
 }
 
@@ -177,7 +206,7 @@ export async function removeClientAccess(projectId: string, orgId: string) {
 export type LandingState = { error: string; savedAt?: number };
 
 export async function updateLanding(projectId: string, _prev: LandingState, form: FormData): Promise<LandingState> {
-  await requireProject(projectId);
+  const { project: before } = await requireProject(projectId);
   const layout = str(form, "layout", 20);
   const spacing = str(form, "spacing", 20);
   const bg = str(form, "bg", 7);
@@ -190,19 +219,29 @@ export async function updateLanding(projectId: string, _prev: LandingState, form
     const ph = await db().query.photos.findFirst({ where: and(eq(photos.id, cover), eq(photos.projectId, projectId)) });
     coverId = ph ? ph.id : null;
   }
-  await db()
-    .update(projects)
-    .set({
-      landingLayout: layout as Project["landingLayout"],
-      landingSpacing: spacing as Project["landingSpacing"],
-      landingBg: bg.toLowerCase(),
-      landingCoverId: coverId,
-      landingIntro: str(form, "intro", 2000),
-      landingGroupFolders: bool(form, "groupFolders"),
-      landingTitleOnCover: bool(form, "titleOnCover"),
-      landingCoverDim: Math.max(0, Math.min(80, Math.round(Number(str(form, "coverDim", 3)) || 0))),
-    })
-    .where(eq(projects.id, projectId));
+  const next = {
+    landingLayout: layout as Project["landingLayout"],
+    landingSpacing: spacing as Project["landingSpacing"],
+    landingBg: bg.toLowerCase(),
+    landingCoverId: coverId,
+    landingIntro: str(form, "intro", 2000),
+    landingGroupFolders: bool(form, "groupFolders"),
+    landingTitleOnCover: bool(form, "titleOnCover"),
+    landingCoverDim: Math.max(0, Math.min(80, Math.round(Number(str(form, "coverDim", 3)) || 0))),
+  };
+  await db().update(projects).set(next).where(eq(projects.id, projectId));
+  const names: Record<keyof typeof next, string> = {
+    landingLayout: "layout",
+    landingSpacing: "spacing",
+    landingBg: "background",
+    landingCoverId: "cover photo",
+    landingIntro: "note",
+    landingGroupFolders: "sections",
+    landingTitleOnCover: "title on cover",
+    landingCoverDim: "cover darkening",
+  };
+  const changed = (Object.keys(next) as (keyof typeof next)[]).filter((k) => before[k] !== next[k]).map((k) => names[k]);
+  if (changed.length) await logStudio(projectId, "landing", [...new Set(changed)].join(", "));
   revalidatePath(`/admin/p/${projectId}`);
   return { error: "", savedAt: Date.now() };
 }
@@ -215,6 +254,7 @@ export async function addSet(projectId: string, form: FormData) {
   if (!name) return;
   const [{ n }] = await db().select({ n: sql<number>`count(*)` }).from(sets).where(eq(sets.projectId, projectId));
   await db().insert(sets).values({ id: newId(), projectId, name, sort: Number(n) });
+  await logStudio(projectId, "set_add", name);
   revalidatePath(`/admin/p/${projectId}`);
 }
 
@@ -230,6 +270,7 @@ export async function reorderPhotos(projectId: string, photoIds: string[]) {
       .set({ sort: sql`case ${photos.id} ${cases} else ${photos.sort} end` })
       .where(and(eq(photos.projectId, projectId), inArray(photos.id, chunk)));
   }
+  if (ids.length) await logStudio(projectId, "reorder");
   revalidatePath(`/admin/p/${projectId}`);
 }
 
@@ -247,6 +288,8 @@ export async function createSetWithPhotos(projectId: string, name: string, photo
       .set({ setId: id })
       .where(and(eq(photos.projectId, projectId), inArray(photos.id, photoIds.slice(0, 1000))));
   }
+  await logStudio(projectId, "set_add", clean);
+  if (photoIds.length) await logStudio(projectId, "move", clean, Math.min(photoIds.length, 1000));
   revalidatePath(`/admin/p/${projectId}`);
 }
 
@@ -254,28 +297,37 @@ export async function renameSet(projectId: string, setId: string, form: FormData
   await requireProject(projectId);
   const name = str(form, "name", 60);
   if (!name) return;
+  const old = await db().query.sets.findFirst({ where: and(eq(sets.id, setId), eq(sets.projectId, projectId)) });
+  if (!old) return;
   await db().update(sets).set({ name }).where(and(eq(sets.id, setId), eq(sets.projectId, projectId)));
+  if (old.name !== name) await logStudio(projectId, "set_rename", `${old.name} → ${name}`);
   revalidatePath(`/admin/p/${projectId}`);
 }
 
 export async function deleteSet(projectId: string, setId: string) {
   await requireProject(projectId);
+  const old = await db().query.sets.findFirst({ where: and(eq(sets.id, setId), eq(sets.projectId, projectId)) });
+  if (!old) return;
   await db().update(photos).set({ setId: null }).where(and(eq(photos.setId, setId), eq(photos.projectId, projectId)));
   await db().delete(sets).where(and(eq(sets.id, setId), eq(sets.projectId, projectId)));
+  await logStudio(projectId, "set_delete", old.name);
   revalidatePath(`/admin/p/${projectId}`);
 }
 
 export async function movePhotos(projectId: string, photoIds: string[], setId: string | null) {
   await requireProject(projectId);
   if (!photoIds.length) return;
+  let setName = "";
   if (setId) {
     const set = await db().query.sets.findFirst({ where: and(eq(sets.id, setId), eq(sets.projectId, projectId)) });
     if (!set) return;
+    setName = set.name;
   }
   await db()
     .update(photos)
     .set({ setId })
     .where(and(eq(photos.projectId, projectId), inArray(photos.id, photoIds.slice(0, 1000))));
+  await logStudio(projectId, "move", setName, Math.min(photoIds.length, 1000));
   revalidatePath(`/admin/p/${projectId}`);
 }
 
@@ -291,6 +343,7 @@ export async function deletePhotos(projectId: string, photoIds: string[]) {
   await db()
     .delete(photos)
     .where(inArray(photos.id, rows.map((r) => r.id)));
+  if (rows.length) await logStudio(projectId, "delete_photos", rows.slice(0, 6).map((r) => r.filename).join(", "), rows.length);
   revalidatePath(`/admin/p/${projectId}`);
 }
 
@@ -303,20 +356,24 @@ export async function addFilm(projectId: string, form: FormData) {
   const aspect = str(form, "aspect", 10) || "16:9";
   const [{ n }] = await db().select({ n: sql<number>`count(*)` }).from(films).where(eq(films.projectId, projectId));
   await db().insert(films).values({ id: newId(), projectId, title, aspect, sort: Number(n), createdAt: new Date() });
+  await logStudio(projectId, "film_add", title);
   revalidatePath(`/admin/p/${projectId}`);
 }
 
 export async function deleteFilm(projectId: string, filmId: string) {
   await requireProject(projectId);
+  const film = await db().query.films.findFirst({ where: and(eq(films.id, filmId), eq(films.projectId, projectId)) });
+  if (!film) return;
   await deletePrefix(`p/${projectId}/films/${filmId}/`);
   await db().delete(films).where(and(eq(films.id, filmId), eq(films.projectId, projectId)));
+  await logStudio(projectId, "film_delete", film.title);
   revalidatePath(`/admin/p/${projectId}`);
 }
 
 export async function deleteVersion(projectId: string, versionId: string) {
   await requireProject(projectId);
   const rows = await db()
-    .select({ v: filmVersions })
+    .select({ v: filmVersions, title: films.title })
     .from(filmVersions)
     .innerJoin(films, eq(films.id, filmVersions.filmId))
     .where(and(eq(filmVersions.id, versionId), eq(films.projectId, projectId)))
@@ -327,5 +384,6 @@ export async function deleteVersion(projectId: string, versionId: string) {
   if (keys.length) await bucket().delete(keys);
   await db().delete(comments).where(eq(comments.versionId, versionId));
   await db().delete(filmVersions).where(eq(filmVersions.id, versionId));
+  await logStudio(projectId, "version_delete", `${rows[0].title} v${v.version}`);
   revalidatePath(`/admin/p/${projectId}`);
 }

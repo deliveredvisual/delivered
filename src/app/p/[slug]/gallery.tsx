@@ -86,6 +86,7 @@ export function Gallery(props: GalleryProps) {
   const [dlState, setDlState] = useState<{ label: string; done: number; total: number } | null>(null);
   const [dlError, setDlError] = useState("");
   const [visible, setVisible] = useState(60);
+  const touchX = useRef<number | null>(null);
   const [view, setViewState] = useState<"grid" | "list">(props.initialView ?? "grid");
   // Remember the choice in the address, so a refresh or a shared link keeps it.
   function setView(v: "grid" | "list") {
@@ -350,25 +351,25 @@ export function Gallery(props: GalleryProps) {
                 </button>
               ))}
             </nav>
-            <div className="row" style={{ padding: "8px 0" }}>
+            <div className="gallery-tools">
               <div className="switcher" role="group" aria-label="Show photos as">
                 <button type="button" aria-pressed={view === "grid"} onClick={() => setView("grid")}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" /></svg>
-                  Grid
+                  <span className="lbl">Grid</span>
                 </button>
                 <button type="button" aria-pressed={view === "list"} onClick={() => setView("list")}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
-                  List
+                  <span className="lbl">List</span>
                 </button>
               </div>
               <div className="dl-wrap">
                 <button type="button" className="btn" aria-expanded={fdOpen} onClick={() => { setFdOpen((o) => !o); setDlOpen(false); }}>
-                  <FolderIcon /> Folders
+                  <FolderIcon /> <span>Folders</span>
                 </button>
                 {fdOpen ? (
                   <div className="dl-menu" role="dialog" aria-label="Your folders">
                     <div className="stack" style={{ gap: 4 }}>
-                      <div style={{ fontSize: 14, fontWeight: 500 }}>Your folders</div>
+                      <div className="row between"><div style={{ fontSize: 14, fontWeight: 500 }}>Your folders</div><button type="button" className="btn btn-small" onClick={() => setFdOpen(false)}>Close</button></div>
                       <div className="small muted">Sort photos your own way. Everyone on your side sees these folders, and so does the studio.</div>
                     </div>
                     <form
@@ -414,7 +415,7 @@ export function Gallery(props: GalleryProps) {
                 ) : null}
               </div>
               <button type="button" className="btn" onClick={() => setTab(mine.size ? "mine" : tab)} title="Tick photos to add them to your selects">
-                <CheckIcon /> Selects · {mine.size}
+                <CheckIcon /> <span className="lbl">Selects ·</span> {mine.size}
               </button>
               <div className="dl-wrap">
                 <button type="button" className="btn btn-primary" aria-expanded={dlOpen} onClick={() => { setDlOpen((o) => !o); setFdOpen(false); }} disabled={!!dlState}>
@@ -423,6 +424,7 @@ export function Gallery(props: GalleryProps) {
                 </button>
                 {dlOpen ? (
                   <div className="dl-menu" role="dialog" aria-label="Download options">
+                    <div className="row between"><div style={{ fontSize: 14, fontWeight: 500 }}>Download as ZIP</div><button type="button" className="btn btn-small" onClick={() => setDlOpen(false)}>Close</button></div>
                     <div className="row" style={{ gap: 6 }}>
                       {(
                         [
@@ -530,8 +532,8 @@ export function Gallery(props: GalleryProps) {
                       <td className="fl-wide small mono">{formatBytes(p.size)}</td>
                       <td>
                         <span className="row fl-actions" style={{ gap: 6, justifyContent: "flex-end", flexWrap: "nowrap" }}>
-                          <button type="button" className="btn btn-small" onClick={() => pinPhoto(p)} aria-label={`Pin ${p.filename} to a message`} title="Pin to a message"><PinIcon /></button>
-                          {p.previewKey ? <a className="btn btn-small" href={fileUrl(p.previewKey, baseName(p.filename) + "_web.jpg")} aria-label={`Download ${p.filename} web size`}>Web</a> : null}
+                          <button type="button" className="btn btn-small fl-extra" onClick={() => pinPhoto(p)} aria-label={`Pin ${p.filename} to a message`} title="Pin to a message"><PinIcon /></button>
+                          {p.previewKey ? <a className="btn btn-small fl-extra" href={fileUrl(p.previewKey, baseName(p.filename) + "_web.jpg")} aria-label={`Download ${p.filename} web size`}>Web</a> : null}
                           {p.originalKey ? <a className="btn btn-small" href={fileUrl(p.originalKey, p.filename)} aria-label={`Download ${p.filename} full resolution`}>Full</a> : null}
                           {openFolder ? (
                             <button type="button" className="btn btn-small" onClick={() => folderOp({ op: "folder_remove", folderId: openFolder.id, photoIds: [p.id] })} aria-label={`Remove ${p.filename} from folder`}>Remove</button>
@@ -544,7 +546,7 @@ export function Gallery(props: GalleryProps) {
               </table>
             </div>
           ) : (
-          <section aria-label="Photos" className="photo-grid">
+          <section aria-label="Photos" className="photo-grid compact">
             {shown.slice(0, visible).map((p, i) => (
               <figure key={p.id} className="tile">
                 <div className="tile-media">
@@ -571,7 +573,7 @@ export function Gallery(props: GalleryProps) {
                   {openFolder ? (
                     <button type="button" className="chat-del" style={{ padding: 0 }} onClick={() => folderOp({ op: "folder_remove", folderId: openFolder.id, photoIds: [p.id] })}>Remove from folder</button>
                   ) : (
-                    <span>{setName(p.setId)}</span>
+                    <span className="tile-set">{setName(p.setId)}</span>
                   )}
                 </figcaption>
               </figure>
@@ -605,8 +607,42 @@ export function Gallery(props: GalleryProps) {
       {current ? (
         <div className="lightbox" role="dialog" aria-modal="true" aria-label={current.filename}>
           <div className="lightbox-top">
-            <span className="mono" style={{ color: "#ccc" }}>{current.filename} · {open! + 1} / {shown.length}</span>
-            <div className="row">
+            <span className="mono lb-name">{current.filename} · {open! + 1} / {shown.length}</span>
+            <button type="button" className="lb-btn" onClick={() => setOpen(null)} aria-label="Close">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+          </div>
+          <div
+            className="lightbox-stage"
+            onTouchStart={(e) => { touchX.current = e.touches[0].clientX; }}
+            onTouchEnd={(e) => {
+              const start = touchX.current;
+              touchX.current = null;
+              if (start === null) return;
+              const dx = e.changedTouches[0].clientX - start;
+              if (dx < -50 && open! < shown.length - 1) setOpen(open! + 1);
+              else if (dx > 50 && open! > 0) setOpen(open! - 1);
+            }}
+          >
+            {current.previewKey ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={fileUrl(current.previewKey)} alt={current.filename} {...noSave} />
+            ) : (
+              <span className="mono" style={{ color: "#aaa" }}>No preview for this file</span>
+            )}
+            {open! > 0 ? (
+              <button type="button" className="lb-btn lb-nav lb-prev" onClick={() => setOpen(open! - 1)} aria-label="Previous photo">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+              </button>
+            ) : null}
+            {open! < shown.length - 1 ? (
+              <button type="button" className="lb-btn lb-nav lb-next" onClick={() => setOpen(open! + 1)} aria-label="Next photo">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+              </button>
+            ) : null}
+          </div>
+          <div className="lightbox-bottom">
+            <div className="lb-actions">
               <button type="button" className="lb-btn" aria-pressed={mine.has(current.id)} onClick={() => togglePick(current.id)}>
                 <CheckIcon /> {mine.has(current.id) ? "Selected" : "Select"}
               </button>
@@ -633,32 +669,10 @@ export function Gallery(props: GalleryProps) {
               {current.originalKey ? (
                 <a className="lb-btn" href={fileUrl(current.originalKey, current.filename)}>Full res</a>
               ) : null}
-              <button type="button" className="lb-btn" onClick={() => setOpen(null)} aria-label="Close">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
-              </button>
             </div>
-          </div>
-          <div className="lightbox-stage">
-            {current.previewKey ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={fileUrl(current.previewKey)} alt={current.filename} {...noSave} />
-            ) : (
-              <span className="mono" style={{ color: "#aaa" }}>No preview for this file</span>
-            )}
-            {open! > 0 ? (
-              <button type="button" className="lb-btn lb-nav lb-prev" onClick={() => setOpen(open! - 1)} aria-label="Previous photo">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
-              </button>
-            ) : null}
-            {open! < shown.length - 1 ? (
-              <button type="button" className="lb-btn lb-nav lb-next" onClick={() => setOpen(open! + 1)} aria-label="Next photo">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
-              </button>
-            ) : null}
-          </div>
-          <div className="lightbox-bottom small" style={{ color: "#aaa" }}>
-            <span>← → to move · P to select · Esc to close</span>
-            {project.nda ? <span>Confidential</span> : null}
+            <span className="small lb-hint">
+              ← → to move · P to select · Esc to close{project.nda ? " · Confidential" : ""}
+            </span>
           </div>
         </div>
       ) : null}

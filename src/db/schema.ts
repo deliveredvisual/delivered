@@ -212,15 +212,21 @@ export const picks = sqliteTable(
   (t) => [uniqueIndex("picks_unique").on(t.projectId, t.photoId, t.viewer)],
 );
 
-/** Activity log: who viewed, picked, commented, downloaded. */
+/**
+ * History: everything that happens on a delivery, by the client side (viewed, picked, commented, downloaded…) and by
+ * the studio (uploaded, moved, changed settings…). `count` > 1 when several quick actions of one kind were merged
+ * into one line, e.g. "picked 12 photos".
+ */
 export const events = sqliteTable(
   "events",
   {
     id: text("id").primaryKey(),
     projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
     viewer: text("viewer").notNull().default(""),
+    side: text("side", { enum: ["client", "studio"] }).notNull().default("client"),
     action: text("action").notNull(),
     detail: text("detail").notNull().default(""),
+    count: integer("count").notNull().default(1),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (t) => [index("events_project").on(t.projectId, t.createdAt)],

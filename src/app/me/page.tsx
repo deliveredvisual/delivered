@@ -21,7 +21,7 @@ export default async function MyDeliveries() {
       <>
         <AppHeader s={s} view="client" />
         <main className="wrap stack" style={{ paddingTop: 48, gap: 20, maxWidth: 640 }}>
-          <h1 className="h2" style={{ fontSize: 40 }}>Client dashboard</h1>
+          <h1 className="h2 page-title">Client dashboard</h1>
           <p className="muted" style={{ margin: 0 }}>
             Receive deliveries from other studios here: everyone at {org.name} sees them, and you can chat, pick selects, sort into folders and download.
           </p>
@@ -55,7 +55,7 @@ export default async function MyDeliveries() {
     <>
       <AppHeader s={s} view="client" />
       <main className="wrap stack" style={{ paddingTop: 48, gap: 8 }}>
-        <h1 className="h2" style={{ fontSize: 40 }}>Deliveries</h1>
+        <h1 className="h2 page-title">Deliveries</h1>
         <p className="small muted" style={{ margin: 0 }}>Sent to {org.name}. Everyone on your team sees these.</p>
         {rows.length === 0 ? (
           <div className="notice" style={{ marginTop: 20, maxWidth: 560 }}>

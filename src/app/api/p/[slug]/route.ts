@@ -4,7 +4,7 @@ import { currentUser, getViewer, managesProject, projectForViewer, setViewer, st
 import { cleanPins, loadClientFolders, loadMessages } from "@/lib/chat";
 import { db } from "@/lib/env";
 import { newId } from "@/lib/crypto";
-import { logEvent } from "@/lib/queries";
+import { logEvent, studioActor } from "@/lib/history";
 import { formatTimecode } from "@/lib/format";
 import { clientFolderPhotos, clientFolders, comments, films, filmVersions, messages, photos, picks } from "@/db/schema";
 
@@ -42,6 +42,9 @@ export async function POST(request: Request, ctx: RouteContext<"/api/p/[slug]">)
   const viewer = await getViewer(project);
   const admin = await managesProject(project);
   if (!viewer) return fail("Name needed", 428);
+  // Everything below goes into the delivery's history, marked as the studio's or the client's doing.
+  const actor = admin ? await studioActor() : viewer;
+  const log = (action: string, detail = "", count = 1) => logEvent(project.id, actor, action, detail, { side: admin ? "studio" : "client", count });
 
   switch (body.op) {
     case "pick": {
@@ -55,12 +58,12 @@ export async function POST(request: Request, ctx: RouteContext<"/api/p/[slug]">)
       } else {
         await d.delete(picks).where(and(eq(picks.projectId, project.id), eq(picks.photoId, photo.id), eq(picks.viewer, viewer)));
       }
-      if (!admin) await logEvent(project.id, viewer, body.on ? "pick" : "unpick", photo.filename);
+      if (!admin) await log(body.on ? "pick" : "unpick", photo.filename);
       return json({ ok: true });
     }
     case "event": {
       if (!admin && (body.action === "download" || body.action === "view_film")) {
-        await logEvent(project.id, viewer, body.action, String(body.detail ?? "").slice(0, 200));
+        await log(body.action, String(body.detail ?? "").slice(0, 200));
       }
       return json({ ok: true });
     }
@@ -80,27 +83,29 @@ export async function POST(request: Request, ctx: RouteContext<"/api/p/[slug]">)
         createdAt: new Date(),
       };
       await d.insert(comments).values(row);
-      if (!admin) await logEvent(project.id, viewer, "comment", `${version.f.title} v${version.v.version} at ${formatTimecode(row.timecode)}`);
+      await log("comment", `${version.f.title} v${version.v.version} at ${formatTimecode(row.timecode)}`);
       return json({ ok: true, comment: row });
     }
     case "resolve": {
       const c = await d.query.comments.findFirst({ where: eq(comments.id, body.commentId) });
       if (!c || !(await versionInProject(c.versionId, project.id))) return fail("No such comment", 404);
       await d.update(comments).set({ resolved: !!body.resolved }).where(eq(comments.id, c.id));
+      const where = await versionInProject(c.versionId, project.id);
+      if (where) await log(body.resolved ? "resolve" : "reopen", `${where.f.title} v${where.v.version} at ${formatTimecode(c.timecode)}`);
       return json({ ok: true });
     }
     case "approve": {
       const version = await versionInProject(body.versionId, project.id);
       if (!version) return fail("No such version", 404);
       await d.update(filmVersions).set({ approvedAt: new Date(), approvedBy: viewer }).where(eq(filmVersions.id, version.v.id));
-      if (!admin) await logEvent(project.id, viewer, "approve", `${version.f.title} v${version.v.version}`);
+      await log("approve", `${version.f.title} v${version.v.version}`);
       return json({ ok: true });
     }
     case "unapprove": {
       const version = await versionInProject(body.versionId, project.id);
       if (!version) return fail("No such version", 404);
       await d.update(filmVersions).set({ approvedAt: null, approvedBy: null }).where(eq(filmVersions.id, version.v.id));
-      if (!admin) await logEvent(project.id, viewer, "unapprove", `${version.f.title} v${version.v.version}`);
+      await log("unapprove", `${version.f.title} v${version.v.version}`);
       return json({ ok: true });
     }
     case "message": {
@@ -117,12 +122,13 @@ export async function POST(request: Request, ctx: RouteContext<"/api/p/[slug]">)
         pins,
         createdAt: new Date(),
       });
-      if (!admin) await logEvent(project.id, viewer, "message", text.slice(0, 80));
+      await log("message", text.slice(0, 80) || (pins.length ? `pinned ${pins.length === 1 ? "an item" : `${pins.length} items`}` : ""));
       return json({ ok: true, messages: await loadMessages(project.id) });
     }
     case "delete_message": {
       if (!admin) return fail("Only the studio can delete messages", 403);
       await d.delete(messages).where(and(eq(messages.id, String(body.messageId)), eq(messages.projectId, project.id)));
+      await log("message_delete");
       return json({ ok: true, messages: await loadMessages(project.id) });
     }
     case "folder_create": {
@@ -131,7 +137,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/p/[slug]">)
       const id = newId();
       await d.insert(clientFolders).values({ id, projectId: project.id, name, createdBy: viewer, createdAt: new Date() });
       if (body.photoIds?.length) await addToFolder(id, project.id, body.photoIds);
-      if (!admin) await logEvent(project.id, viewer, "folder", name);
+      await log("folder", name);
       return json({ ok: true, id, folders: await loadClientFolders(project.id) });
     }
     case "folder_rename":
@@ -144,13 +150,19 @@ export async function POST(request: Request, ctx: RouteContext<"/api/p/[slug]">)
         const name = String(body.name ?? "").trim().slice(0, 60);
         if (!name) return fail("Name the folder");
         await d.update(clientFolders).set({ name }).where(eq(clientFolders.id, folder.id));
+        if (name !== folder.name) await log("folder_rename", `${folder.name} → ${name}`);
       } else if (body.op === "folder_delete") {
         await d.delete(clientFolders).where(eq(clientFolders.id, folder.id));
+        await log("folder_delete", folder.name);
       } else if (body.op === "folder_add") {
-        await addToFolder(folder.id, project.id, body.photoIds);
+        const added = await addToFolder(folder.id, project.id, body.photoIds);
+        if (added) await log("folder_add", folder.name, added);
       } else {
         const ids = (Array.isArray(body.photoIds) ? body.photoIds : []).slice(0, 2000).map(String);
-        if (ids.length) await d.delete(clientFolderPhotos).where(and(eq(clientFolderPhotos.folderId, folder.id), inArray(clientFolderPhotos.photoId, ids)));
+        if (ids.length) {
+          await d.delete(clientFolderPhotos).where(and(eq(clientFolderPhotos.folderId, folder.id), inArray(clientFolderPhotos.photoId, ids)));
+          await log("folder_remove", folder.name, ids.length);
+        }
       }
       return json({ ok: true, folders: await loadClientFolders(project.id) });
     }
@@ -160,9 +172,9 @@ export async function POST(request: Request, ctx: RouteContext<"/api/p/[slug]">)
 }
 
 /** Adds this project's photos (ignoring any others) to a client folder. */
-async function addToFolder(folderId: string, projectId: string, photoIds: unknown) {
+async function addToFolder(folderId: string, projectId: string, photoIds: unknown): Promise<number> {
   const ids = (Array.isArray(photoIds) ? photoIds : []).slice(0, 2000).map(String);
-  if (!ids.length) return;
+  if (!ids.length) return 0;
   const d = db();
   const own: string[] = [];
   for (let i = 0; i < ids.length; i += 90) {
@@ -176,6 +188,7 @@ async function addToFolder(folderId: string, projectId: string, photoIds: unknow
       .values(own.slice(i, i + 30).map((photoId, j) => ({ folderId, photoId, addedAt: new Date(now + i + j) })))
       .onConflictDoNothing();
   }
+  return own.length;
 }
 
 async function versionInProject(versionId: string, projectId: string) {

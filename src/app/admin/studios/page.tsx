@@ -7,7 +7,7 @@ import { formatDate } from "@/lib/format";
 import { DEFAULT_STUDIO_ID, studios } from "@/db/schema";
 import { setStudioStatus } from "./actions";
 
-export const metadata: Metadata = { title: "Studios" };
+export const metadata: Metadata = { title: "Approvals" };
 
 /** Site owner only: every creative who has signed up, and switching their studio on. */
 export default async function StudiosPage() {
@@ -27,7 +27,7 @@ export default async function StudiosPage() {
   return (
     <main className="wrap stack" style={{ paddingTop: 48, gap: 28 }}>
       <div className="stack" style={{ gap: 8 }}>
-        <h1 className="h2" style={{ fontSize: 40 }}>Studios</h1>
+        <h1 className="h2 page-title">Approvals</h1>
         <p className="muted" style={{ margin: 0, maxWidth: 620 }}>
           Organisations with the creative dashboard turned on wait here until you approve them, so nobody can upload to your storage without your say-so. Client dashboards don&rsquo;t need approval.
           {waiting ? ` ${waiting} waiting.` : ""}

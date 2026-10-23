@@ -32,9 +32,10 @@ Runs entirely on Cloudflare: the app on Workers, the database on D1, files on R2
   can invite colleagues with a one-use link (14 days); the owner manages the team and settings.
 - Each organisation can have two dashboards, switched at the top of every page:
   - **Creative** (`/admin`): make and send deliveries. Turning it on waits for the site owner's approval at
-    `/admin/studios`, so nobody uploads to your storage without your say-so.
+    `/admin/studios` (Approvals), so nobody uploads to your storage without your say-so.
   - **Client** (`/me`): deliveries shared with the organisation. Turns on instantly.
-  The one chosen at sign-up is on to begin with; the other is turned on from the Team page.
+  The one chosen at sign-up is on to begin with; the other is turned on from the Team page. The switch only
+  appears once both are on.
 - Deliveries are shared with whole organisations: add anyone's email on a project (Clients box) and everyone there,
   including later joiners, sees it without the link or password. A delivery opened while signed in is saved too.
   Plain links keep working without an account.
@@ -49,8 +50,11 @@ Runs entirely on Cloudflare: the app on Workers, the database on D1, files on R2
 - Files of any size: uploads go up in 32 MB chunks; previews and thumbnails are made in your browser
 - Drag photos into order (or sort by file name / upload order, or move a selection to the start or end);
   clients see that order everywhere
-- Folders for photos (create one while moving photos), see what each client picked and how they sorted
-  them, full activity log
+- Each project page has tabs: Photos, Films, Clients, Landing page, History, Settings
+- Folders for photos (create one while moving photos), see what each client picked and how they sorted them
+- History (`/admin/history`, and per project): every change by the studio (uploads, moves, folders, settings,
+  landing page, films, extending, new links) and everything clients do (views, selects, folders, comments,
+  approvals, messages, downloads), filterable by Clients / Studio. Quick repeats merge into one line
 - Landing page settings per project, with a preview link
 - Extend, archive, restore, or change the link
 
@@ -98,6 +102,7 @@ npm run preview                     # the production build in the Workers runtim
 | Chunked uploads into R2 | `src/app/api/admin/upload/route.ts`, browser side in `src/lib/upload-client.ts` |
 | Browser-side ZIPs | `src/lib/zip-client.ts` |
 | Admin screens | `src/app/admin/` |
+| History log and its page | `src/lib/history.ts`, `src/components/history-panel.tsx`, `src/app/admin/history/` |
 | Client landing page, gallery and film review | `src/app/p/[slug]/` (`page.tsx` landing, `gallery/`, `film/`) |
 | Chat panel, pins, client folders | `src/app/p/[slug]/client-shell.tsx`, `src/lib/chat.ts`, `src/app/api/p/[slug]/` |
 
