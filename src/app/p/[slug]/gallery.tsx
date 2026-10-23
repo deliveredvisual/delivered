@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { fileUrl } from "@/lib/urls";
-import { formatBytes, formatTimecode } from "@/lib/format";
-import { chooseSaveTarget, socialCrop, writeZip, type ZipEntry } from "@/lib/zip-client";
+import { formatBytes, formatTimecode, plural } from "@/lib/format";
+import { chooseSaveTarget, writeZip, type ZipEntry } from "@/lib/zip-client";
 import { NamePrompt, api } from "./name-prompt";
 
 export type GalleryPhoto = {
@@ -50,7 +50,7 @@ export type GalleryProps = {
   picks: { photoId: string; viewer: string }[];
 };
 
-type Preset = "full" | "web" | "social" | "raw";
+type Preset = "full" | "web" | "raw";
 
 const baseName = (f: string) => f.replace(/\.[^.]+$/, "");
 const zipSafe = (s: string) => s.replace(/[\\/:*?"<>|]+/g, "-").trim();
@@ -133,13 +133,6 @@ export function Gallery(props: GalleryProps) {
         return list.filter((p) => p.originalKey).map((p) => ({ name: folder(p) + p.filename, size: p.size, url: fileUrl(p.originalKey) }));
       case "web":
         return list.filter((p) => p.previewKey).map((p) => ({ name: folder(p) + baseName(p.filename) + ".jpg", size: 1_500_000, url: fileUrl(p.previewKey) }));
-      case "social":
-        return list
-          .filter((p) => p.previewKey)
-          .flatMap((p) => [
-            { name: `4x5/${baseName(p.filename)}_4x5.jpg`, size: 500_000, make: () => socialCrop(fileUrl(p.previewKey), 4, 5) },
-            { name: `9x16/${baseName(p.filename)}_9x16.jpg`, size: 500_000, make: () => socialCrop(fileUrl(p.previewKey), 9, 16) },
-          ]);
       case "raw":
         return list
           .filter((p) => p.rawKey)
@@ -151,17 +144,16 @@ export function Gallery(props: GalleryProps) {
     {
       id: "full",
       label: "Full resolution",
-      detail: `${entriesFor("full").length} files · ${formatBytes(entriesFor("full").reduce((s, e) => s + e.size, 0))}`,
+      detail: `${plural(entriesFor("full").length, "file")} · ${formatBytes(entriesFor("full").reduce((s, e) => s + e.size, 0))}`,
     },
-    { id: "web", label: "Web", detail: `JPEG, 2560px long edge · ${entriesFor("web").length} files` },
-    { id: "social", label: "Social crops", detail: `4:5 and 9:16, 1080px wide · ${entriesFor("web").length} of each` },
+    { id: "web", label: "Web", detail: `JPEG, 2560px long edge · ${plural(entriesFor("web").length, "file")}` },
   ];
   if (project.rawEnabled && photos.some((p) => p.rawKey)) {
     const raws = entriesFor("raw");
     presets.push({
       id: "raw",
       label: "RAW originals",
-      detail: `Camera files · ${raws.length} files · ${formatBytes(raws.reduce((s, e) => s + e.size, 0))}`,
+      detail: `Camera files · ${plural(raws.length, "file")} · ${formatBytes(raws.reduce((s, e) => s + e.size, 0))}`,
     });
   }
 
@@ -177,7 +169,7 @@ export function Gallery(props: GalleryProps) {
       setDlOpen(false);
       setDlState({ label: `${label} · ${scopeLabel}`, done: 0, total: entries.length });
       const { failed } = await writeZip(target, zipName, entries, (done, total) => setDlState({ label: `${label} · ${scopeLabel}`, done, total }));
-      api(slug, { op: "event", action: "download", detail: `${label} · ${scopeLabel} (${entries.length} files)` });
+      api(slug, { op: "event", action: "download", detail: `${label} · ${scopeLabel} (${plural(entries.length, "file")})` });
       setDlState(null);
       if (failed.length) setDlError(`${failed.length} file${failed.length === 1 ? "" : "s"} couldn’t be added. Try again, or download them one at a time.`);
     } catch (e) {

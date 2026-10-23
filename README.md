@@ -11,7 +11,7 @@ Runs entirely on Cloudflare: the app on Workers, the database on D1, files on R2
 - Optional password per delivery; archived automatically after 365 days
 - Photos grouped into sets, lightbox with keyboard controls (← → P Esc)
 - Personal selects for every person on the client side, plus a "Team selects" view
-- Downloads as ZIP: full resolution, web (2560px), social crops (4:5 and 9:16), RAW originals
+- Downloads as ZIP: full resolution, web (2560px), RAW originals
 - Usage licence shown on every delivery
 - Films with versions (v1, v2…), comments pinned to a timecode, resolve, approve
 - NDA mode: confidential notice, right-click saving disabled
@@ -75,7 +75,7 @@ npm run preview                     # the production build in the Workers runtim
 | Sign-up, sign-in, client home, team, studio approval | `src/app/signup/`, `src/app/login/`, `src/app/me/`, `src/app/admin/team/`, `src/app/admin/studios/` |
 | File serving with access checks and video seeking | `src/app/api/file/route.ts` |
 | Chunked uploads into R2 | `src/app/api/admin/upload/route.ts`, browser side in `src/lib/upload-client.ts` |
-| Browser-side ZIPs and social crops | `src/lib/zip-client.ts` |
+| Browser-side ZIPs | `src/lib/zip-client.ts` |
 | Admin screens | `src/app/admin/` |
 | Client gallery and film review | `src/app/p/[slug]/` |
 
