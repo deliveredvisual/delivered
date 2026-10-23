@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { desc, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { isSiteOwner } from "@/lib/auth";
 import { db } from "@/lib/env";
 import { formatDate } from "@/lib/format";
@@ -20,6 +20,7 @@ export default async function StudiosPage() {
       projects: sql<number>`(select count(*) from projects p where p.studio_id = "studios"."id")`,
     })
     .from(studios)
+    .where(eq(studios.creative, true))
     .orderBy(sql`case when ${studios.status} = 'pending' then 0 else 1 end`, desc(studios.createdAt));
   const waiting = rows.filter((r) => r.studio.status === "pending").length;
 
@@ -28,7 +29,7 @@ export default async function StudiosPage() {
       <div className="stack" style={{ gap: 8 }}>
         <h1 className="h2" style={{ fontSize: 40 }}>Studios</h1>
         <p className="muted" style={{ margin: 0, maxWidth: 620 }}>
-          Creatives who sign up get a studio that waits here until you switch it on, so nobody can upload to your storage without your say-so.
+          Organisations with the creative dashboard turned on wait here until you approve them, so nobody can upload to your storage without your say-so. Client dashboards don&rsquo;t need approval.
           {waiting ? ` ${waiting} waiting.` : ""}
         </p>
       </div>

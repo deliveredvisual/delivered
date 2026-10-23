@@ -8,12 +8,12 @@ export function StudioForm({ name, email }: { name: string; email: string }) {
   return (
     <form action={action} className="stack" style={{ maxWidth: 520 }}>
       <div className="field">
-        <label htmlFor="studio-name">Studio name</label>
+        <label htmlFor="studio-name">Organisation name</label>
         <input id="studio-name" name="name" className="input" defaultValue={name} required maxLength={80} />
-        <span className="small muted">Shown at the top of every delivery.</span>
+        <span className="small muted">Shown at the top of every delivery you send.</span>
       </div>
       <div className="field">
-        <label htmlFor="studio-email">Contact email for clients</label>
+        <label htmlFor="studio-email">Contact email for your clients</label>
         <input id="studio-email" name="email" type="email" className="input" defaultValue={email} />
       </div>
       {state.error ? <p className="error" role="alert">{state.error}</p> : null}

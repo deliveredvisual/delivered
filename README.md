@@ -15,8 +15,8 @@ Runs entirely on Cloudflare: the app on Workers, the database on D1, files on R2
 - Messages: one chat per project shared by the studio and everyone on the client side, on every client page and on
   your project page. Photos, and films at an exact moment, can be pinned into messages; clicking a pin opens it
 - Clients can make their own folders to sort photos (a photo can be in several); you see them on your project page
-- Add a client to a delivery by the email of their client account (project page → Clients): it appears on their
-  deliveries page and opens without the link or password. Past clients are suggested as you type
+- Add a client organisation to a delivery by anyone's email there (project page → Clients). Past clients are
+  suggested as you type
 - Optional password per delivery; archived automatically after 365 days
 - Photos grouped into your folders, lightbox with keyboard controls (← → P Esc)
 - Personal selects for every person on the client side, plus a "Team selects" view
@@ -25,13 +25,19 @@ Runs entirely on Cloudflare: the app on Workers, the database on D1, files on R2
 - Films with versions (v1, v2…), comments pinned to a timecode, resolve, approve
 - NDA mode: confidential notice, right-click saving disabled
 
-**Accounts** (`/signup`, `/login`)
-- **Creatives** (photographers, filmmakers…) sign up and get their own studio. New studios wait for approval at
-  `/admin/studios` (only the main studio's owner sees this), so nobody uploads to your storage without your say-so.
-- **Team members** join a studio from an invite link the owner makes on `/admin/team` (one use, 14 days).
-- **Clients** sign up freely. Any delivery they open while signed in is saved to `/me`, their home page; a password-
-  protected delivery they've unlocked once doesn't ask again. Plain links keep working without an account.
-- Each studio sees only its own projects, uploads and files.
+**Accounts and organisations** (`/signup`, `/login`, `/team`)
+- Every account belongs to an organisation (a studio, or a client company like McLaren) with a team. Anyone in it
+  can invite colleagues with a one-use link (14 days); the owner manages the team and settings.
+- Each organisation can have two dashboards, switched at the top of every page:
+  - **Creative** (`/admin`): make and send deliveries. Turning it on waits for the site owner's approval at
+    `/admin/studios`, so nobody uploads to your storage without your say-so.
+  - **Client** (`/me`): deliveries shared with the organisation. Turns on instantly.
+  The one chosen at sign-up is on to begin with; the other is turned on from the Team page.
+- Deliveries are shared with whole organisations: add anyone's email on a project (Clients box) and everyone there,
+  including later joiners, sees it without the link or password. A delivery opened while signed in is saved too.
+  Plain links keep working without an account.
+- Someone alone in their own organisation who accepts an invite moves across with their deliveries.
+- Each organisation sees only its own projects, uploads and files.
 - The original `ADMIN_PASSWORD` still signs you into the main studio as a backup.
 - Not built yet: email verification and "forgot password" (both need an email-sending service).
 
@@ -83,7 +89,7 @@ npm run preview                     # the production build in the Workers runtim
 | --- | --- |
 | Database schema | `src/db/schema.ts`, migrations in `drizzle/` (`npm run db:generate` after schema changes) |
 | Accounts, studios, sign-in, client access | `src/lib/auth.ts` |
-| Sign-up, sign-in, client home, team, studio approval | `src/app/signup/`, `src/app/login/`, `src/app/me/`, `src/app/admin/team/`, `src/app/admin/studios/` |
+| Sign-up, sign-in, client dashboard, team, approvals, header switch | `src/app/signup/`, `src/app/login/`, `src/app/me/`, `src/app/team/`, `src/app/admin/studios/`, `src/components/app-header.tsx` |
 | File serving with access checks and video seeking | `src/app/api/file/route.ts` |
 | Chunked uploads into R2 | `src/app/api/admin/upload/route.ts`, browser side in `src/lib/upload-client.ts` |
 | Browser-side ZIPs | `src/lib/zip-client.ts` |

@@ -1,16 +1,24 @@
 import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /** A delivery: one shoot for one client. Clients reach it through its private `slug` link. */
-/** A creative's business (photographer, filmmaker…). Every project belongs to one studio; team members share it. */
+/**
+ * An organisation: a creative studio, a client company like McLaren, or both. Everyone with a sign-in belongs to
+ * one, with their colleagues. (Called "studios" in the code for history's sake.)
+ *  - creative: can make and send deliveries. Needs the site owner's approval (`status`) before it can upload.
+ *  - client: has a dashboard of deliveries sent to the organisation.
+ */
 export const studios = sqliteTable("studios", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().default(""), // shown to clients as the contact address
-  status: text("status", { enum: ["active", "pending"] }).notNull().default("pending"),
+  status: text("status", { enum: ["active", "pending"] }).notNull().default("pending"), // approval of the creative side
+  creative: integer("creative", { mode: "boolean" }).notNull().default(true),
+  client: integer("client", { mode: "boolean" }).notNull().default(false),
+  primaryView: text("primary_view", { enum: ["creative", "client"] }).notNull().default("creative"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 });
 
-/** Anyone with a sign-in: creatives (and their team) or clients. */
+/** Anyone with a sign-in. `kind` is only which way they signed up; what they can do comes from their organisation. */
 export const users = sqliteTable(
   "users",
   {
@@ -25,7 +33,7 @@ export const users = sqliteTable(
   (t) => [uniqueIndex("users_email").on(t.email)],
 );
 
-/** Who works in which studio. The owner manages the team; members do everything else. */
+/** Who is in which organisation. The owner manages the team and settings; members do everything else. */
 export const memberships = sqliteTable(
   "memberships",
   {
@@ -37,7 +45,7 @@ export const memberships = sqliteTable(
   (t) => [uniqueIndex("memberships_unique").on(t.studioId, t.userId), index("memberships_user").on(t.userId)],
 );
 
-/** One-off links a studio owner sends to add someone to the team. */
+/** One-off links anyone in an organisation can send to bring a colleague in. */
 export const invites = sqliteTable(
   "invites",
   {
@@ -50,17 +58,17 @@ export const invites = sqliteTable(
   (t) => [index("invites_studio").on(t.studioId)],
 );
 
-/** Deliveries on a client's home page: ones they've opened while signed in, or ones a studio invited them to. */
-export const savedDeliveries = sqliteTable(
-  "saved_deliveries",
+/** Deliveries shared with an organisation's client dashboard: everyone in it sees them, including later joiners. */
+export const orgDeliveries = sqliteTable(
+  "org_deliveries",
   {
-    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    orgId: text("org_id").notNull().references(() => studios.id, { onDelete: "cascade" }),
     projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    addedBy: text("added_by"), // who at the sending studio added them; null when they saved it from the link
     savedAt: integer("saved_at", { mode: "timestamp_ms" }).notNull(),
-    invitedBy: text("invited_by"), // who at the studio added them; null when they found it through the link
-    openedAt: integer("opened_at", { mode: "timestamp_ms" }), // last time they opened it
+    openedAt: integer("opened_at", { mode: "timestamp_ms" }), // last time anyone in the organisation opened it
   },
-  (t) => [uniqueIndex("saved_unique").on(t.userId, t.projectId), index("saved_project").on(t.projectId)],
+  (t) => [uniqueIndex("org_deliveries_unique").on(t.orgId, t.projectId), index("org_deliveries_project").on(t.projectId)],
 );
 
 /** Failed sign-ins, to slow down password guessing. */

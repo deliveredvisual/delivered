@@ -307,3 +307,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .cover-opt[aria-checked="true"] { outline: 2px solid #111; outline-offset: 2px; }
 .landing[data-tone="dark"] .chat-fab { background: #fff; color: #111; }
 .landing[data-tone="dark"] .chat-fab .chat-badge { background: #111; color: #fff; }
+
+/* ---------- Dashboard switch ---------- */
+.switcher { display: inline-flex; border: 1px solid var(--line-strong); padding: 3px; gap: 2px; }
+.switcher a { min-height: 34px; padding: 0 14px; display: inline-flex; align-items: center; font-size: 13px; text-decoration: none; color: var(--ink-2); }
+.switcher a[aria-current="page"] { background: var(--ink); color: #fff; }
+.switcher a.off { color: var(--muted); }
+.switcher a:hover:not([aria-current="page"]) { color: var(--ink); }
+.dash-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }

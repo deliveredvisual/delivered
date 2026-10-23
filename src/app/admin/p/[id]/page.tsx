@@ -7,9 +7,9 @@ import { loadClientFolders } from "@/lib/chat";
 import { ClientShell } from "@/app/p/[slug]/client-shell";
 import { LandingForm } from "./landing-form";
 import { InviteClient } from "./invite-client";
-import { and, desc, eq, ne, notInArray } from "drizzle-orm";
+import { and, desc, eq, ne, notInArray, sql } from "drizzle-orm";
 import { db } from "@/lib/env";
-import { projects as projectsTable, savedDeliveries, users } from "@/db/schema";
+import { memberships, orgDeliveries, projects as projectsTable, studios as studiosTable, users } from "@/db/schema";
 import { describeEvent, getProjectFull, picksFor, recentEvents } from "@/lib/queries";
 import { daysLeft, formatBytes, formatDate, formatTimecode, plural, timeAgo } from "@/lib/format";
 import { fileUrl } from "@/lib/urls";
@@ -44,23 +44,31 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
   const { project: p, sets, photos, films } = full;
   const [picks, activity, clientFolders, studio] = await Promise.all([picksFor(p.id), recentEvents(p.id), loadClientFolders(p.id), studioFor(p)]);
 
-  // Client accounts with this delivery, and clients this studio has delivered to before (for quick picking).
+  // Client organisations with this delivery, and people at organisations this studio has delivered to before.
   const withAccess = await db()
-    .select({ id: users.id, name: users.name, email: users.email, company: users.company, invitedBy: savedDeliveries.invitedBy, openedAt: savedDeliveries.openedAt })
-    .from(savedDeliveries)
-    .innerJoin(users, eq(users.id, savedDeliveries.userId))
-    .where(eq(savedDeliveries.projectId, p.id))
-    .orderBy(desc(savedDeliveries.savedAt));
+    .select({
+      id: studiosTable.id,
+      name: studiosTable.name,
+      addedBy: orgDeliveries.addedBy,
+      openedAt: orgDeliveries.openedAt,
+      people: sql<number>`(select count(*) from memberships m where m.studio_id = ${studiosTable.id})`,
+    })
+    .from(orgDeliveries)
+    .innerJoin(studiosTable, eq(studiosTable.id, orgDeliveries.orgId))
+    .where(eq(orgDeliveries.projectId, p.id))
+    .orderBy(desc(orgDeliveries.savedAt));
   const known = await db()
-    .selectDistinct({ email: users.email, name: users.name, company: users.company })
-    .from(savedDeliveries)
-    .innerJoin(users, eq(users.id, savedDeliveries.userId))
-    .innerJoin(projectsTable, eq(projectsTable.id, savedDeliveries.projectId))
+    .selectDistinct({ email: users.email, name: users.name, company: studiosTable.name })
+    .from(orgDeliveries)
+    .innerJoin(projectsTable, eq(projectsTable.id, orgDeliveries.projectId))
+    .innerJoin(memberships, eq(memberships.studioId, orgDeliveries.orgId))
+    .innerJoin(users, eq(users.id, memberships.userId))
+    .innerJoin(studiosTable, eq(studiosTable.id, orgDeliveries.orgId))
     .where(
       and(
         eq(projectsTable.studioId, p.studioId),
-        ne(savedDeliveries.projectId, p.id),
-        withAccess.length ? notInArray(users.id, withAccess.map((u) => u.id)) : undefined,
+        ne(orgDeliveries.projectId, p.id),
+        withAccess.length ? notInArray(orgDeliveries.orgId, withAccess.map((o) => o.id)) : undefined,
       ),
     )
     .limit(200);
@@ -115,27 +123,24 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
       <section className="panel stack">
         <div className="row between">
           <h2 className="h3">Clients</h2>
-          <span className="small muted">Added clients see it on their deliveries page and don&rsquo;t need the link or password.</span>
+          <span className="small muted">Everyone at an added organisation sees it on their dashboard, without the link or password.</span>
         </div>
         {withAccess.length ? (
           <ul className="stack" style={{ listStyle: "none", margin: 0, padding: 0, gap: 0 }}>
-            {withAccess.map((u) => (
-              <li key={u.id} className="row between" style={{ borderTop: "1px solid var(--line)", padding: "10px 0" }}>
+            {withAccess.map((o) => (
+              <li key={o.id} className="row between" style={{ borderTop: "1px solid var(--line)", padding: "10px 0" }}>
                 <span className="stack" style={{ gap: 2 }}>
                   <span style={{ fontWeight: 500 }}>
-                    {u.name}
-                    {u.company ? <span className="muted" style={{ fontWeight: 400 }}> · {u.company}</span> : null}
+                    {o.name} <span className="muted" style={{ fontWeight: 400 }}>· {plural(Number(o.people), "person", "people")}</span>
                   </span>
                   <span className="small muted">
-                    <span className="mono">{u.email}</span>
+                    {o.addedBy ? `added by ${o.addedBy}` : "saved it from the link"}
                     {" · "}
-                    {u.invitedBy ? `added by ${u.invitedBy}` : "saved it from the link"}
-                    {" · "}
-                    {u.openedAt ? `last opened ${timeAgo(u.openedAt)}` : "not opened yet"}
+                    {o.openedAt ? `last opened ${timeAgo(o.openedAt)}` : "not opened yet"}
                   </span>
                 </span>
-                <form action={removeClientAccess.bind(null, p.id, u.id)}>
-                  <ConfirmButton message={`Remove ${u.name}? It comes off their deliveries page.${p.passwordHash ? "" : " The link itself still opens it, since this delivery has no password."}`}>Remove</ConfirmButton>
+                <form action={removeClientAccess.bind(null, p.id, o.id)}>
+                  <ConfirmButton message={`Remove ${o.name}? It comes off their dashboard.${p.passwordHash ? "" : " The link itself still opens it, since this delivery has no password."}`}>Remove</ConfirmButton>
                 </form>
               </li>
             ))}

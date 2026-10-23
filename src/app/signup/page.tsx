@@ -47,8 +47,8 @@ export default async function SignupPage({ searchParams }: PageProps<"/signup">)
       </nav>
       <p className="small muted" style={{ margin: 0 }}>
         {creative
-          ? "For photographers, filmmakers and other creatives. You get your own studio to deliver work to your clients."
-          : "Keep every delivery sent to you in one place. Open a delivery link while signed in and it's saved here."}
+          ? "For photographers, filmmakers and other creatives: deliver work to your clients. You can also turn on a client dashboard later."
+          : "Every delivery sent to your company in one place, shared with your colleagues. You can also turn on a creative dashboard later."}
       </p>
       {creative ? <CreativeSignup /> : <ClientSignup next={next} />}
     </AuthShell>

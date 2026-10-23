@@ -61,7 +61,7 @@ export function ClientSignup({ next }: { next: string }) {
   return (
     <Form action={signupClient} submit="Create account" busy="Creating…" next={next}>
       <Field id="name" label="Your name" auto="name" />
-      <Field id="company" label="Company" auto="organization" required={false} hint="Optional" />
+      <Field id="company" label="Company or organisation" auto="organization" hint="e.g. McLaren Automotive. Colleagues you invite join it." />
       <Field id="email" label="Work email" type="email" auto="email" />
       <Field id="password" label="Password" type="password" auto="new-password" hint={pw} />
     </Form>

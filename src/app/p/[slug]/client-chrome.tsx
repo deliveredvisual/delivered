@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { currentStudio, currentUser } from "@/lib/auth";
+import { currentOrg } from "@/lib/auth";
 
 /**
  * Top bar every client sees: the studio's name, a small "Powered by" credit, and an account link —
  * "Your deliveries" when signed in, otherwise an offer to keep this delivery in a free account.
  */
 export async function ClientTopbar({ studio, next, home }: { studio: string; next?: string; home?: string }) {
-  const [user, team] = await Promise.all([currentUser(), currentStudio()]);
+  const org = await currentOrg();
   const after = next ? `?next=${encodeURIComponent(next)}` : "";
   return (
     <header className="topbar">
@@ -17,10 +17,8 @@ export async function ClientTopbar({ studio, next, home }: { studio: string; nex
         <div className="wordmark">{studio}</div>
       )}
       <div className="row small" style={{ gap: 20 }}>
-        {team ? (
-          <Link href="/admin" className="muted">Studio</Link>
-        ) : user ? (
-          <Link href="/me" className="muted">Your deliveries</Link>
+        {org ? (
+          <Link href="/" className="muted">Dashboard</Link>
         ) : (
           <>
             <Link href={`/login${after}`} className="muted">Sign in</Link>

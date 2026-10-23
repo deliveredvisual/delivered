@@ -8,8 +8,8 @@ import { sign, verify, timingSafeEqual, hashPassword, checkPassword, newId } fro
 import {
   DEFAULT_STUDIO_ID,
   memberships,
+  orgDeliveries,
   projects,
-  savedDeliveries,
   signinFailures,
   studios,
   users,
@@ -77,8 +77,8 @@ export type StudioSession = {
   user: User | null; // null when signed in with the backup studio password
 };
 
-/** The studio the signed-in person works in, or null for clients and visitors. */
-export const currentStudio = cache(async (): Promise<StudioSession | null> => {
+/** The organisation the signed-in person belongs to (with whichever dashboards it has), or null for visitors. */
+export const currentOrg = cache(async (): Promise<StudioSession | null> => {
   const user = await currentUser();
   if (user) {
     const rows = await db()
@@ -96,12 +96,41 @@ export const currentStudio = cache(async (): Promise<StudioSession | null> => {
   return null;
 });
 
-/** For studio pages: sends visitors to sign in and clients to their own home page. */
-export async function requireStudio(): Promise<StudioSession> {
-  const s = await currentStudio();
+/** The signed-in organisation, when its creative dashboard is on (approved or still waiting). */
+export const currentStudio = cache(async (): Promise<StudioSession | null> => {
+  const s = await currentOrg();
+  return s && s.studio.creative ? s : null;
+});
+
+/** Any signed-in page: sends visitors to sign in. */
+export async function requireOrg(): Promise<StudioSession> {
+  const s = await currentOrg();
   if (s) return s;
-  if (await currentUser()) redirect("/me");
   redirect("/login");
+}
+
+/** Creative dashboard pages. Organisations without it are sent to their client dashboard (where they can turn it on). */
+export async function requireStudio(): Promise<StudioSession> {
+  const s = await requireOrg();
+  if (!s.studio.creative) redirect("/me");
+  return s;
+}
+
+/** Where someone lands after signing in: the dashboard they signed up for, if it's still on. */
+export function homeFor(s: StudioSession | null): string {
+  if (!s) return "/login";
+  if (s.studio.primaryView === "client" && s.studio.client) return "/me";
+  if (s.studio.creative) return "/admin";
+  return "/me";
+}
+
+/** Switches on the other dashboard. The creative side then waits for the site owner's approval. */
+export async function enableSide(orgId: string, side: "creative" | "client"): Promise<void> {
+  if (side === "client") {
+    await db().update(studios).set({ client: true }).where(eq(studios.id, orgId));
+  } else {
+    await db().update(studios).set({ creative: true }).where(eq(studios.id, orgId));
+  }
 }
 
 /** Like requireStudio, but a studio still waiting for approval can't create or change deliveries. */
@@ -123,13 +152,13 @@ export async function requireProject(projectId: string): Promise<{ s: StudioSess
 
 /** The person who runs the whole site (Alec): owner of the original studio. Approves new creatives. */
 export async function isSiteOwner(): Promise<boolean> {
-  const s = await currentStudio();
+  const s = await currentOrg();
   return !!s && s.studio.id === DEFAULT_STUDIO_ID && s.role === "owner";
 }
 
-/** True when the signed-in person works in the studio that made this delivery. */
+/** True when the signed-in person is in the organisation that made this delivery. */
 export async function managesProject(project: Project): Promise<boolean> {
-  const s = await currentStudio();
+  const s = await currentOrg();
   return !!s && s.studio.id === project.studioId;
 }
 
@@ -202,34 +231,56 @@ async function insertUser(a: NewAccount, kind: User["kind"]): Promise<{ user: Us
   return { user };
 }
 
-/** A client account: sees every delivery they've opened, in one place. */
+async function createOrg(name: string, email: string, side: "creative" | "client"): Promise<string> {
+  const id = newId();
+  await db()
+    .insert(studios)
+    .values({
+      id,
+      name: name.trim().slice(0, 80),
+      email: side === "creative" ? email : "",
+      status: "pending",
+      creative: side === "creative",
+      client: side === "client",
+      primaryView: side,
+      createdAt: new Date(),
+    });
+  return id;
+}
+
+/**
+ * A client account: a new organisation (their company) with its client dashboard on. Colleagues join it from an
+ * invite link, and every delivery shared with it is seen by all of them.
+ */
 export async function signUpClient(a: NewAccount): Promise<string | null> {
   const r = await insertUser(a, "client");
   if ("error" in r) return r.error;
+  const orgId = await createOrg(r.user.company || r.user.name, r.user.email, "client");
+  await db().insert(memberships).values({ studioId: orgId, userId: r.user.id, role: "owner", createdAt: new Date() });
   await startSession(r.user.id);
   return null;
 }
 
 /**
- * A creative (photographer, filmmaker, retoucher…) account with its own new studio.
- * The site owner approves the studio before it can create deliveries.
+ * A creative (photographer, filmmaker, retoucher…) account: a new organisation with its creative dashboard on.
+ * The site owner approves it before it can create deliveries.
  */
 export async function signUpCreative(a: NewAccount & { studioName: string }): Promise<string | null> {
   const studioName = a.studioName.trim().slice(0, 80);
   if (!studioName) return "Enter your studio or business name.";
   const r = await insertUser(a, "creative");
   if ("error" in r) return r.error;
-  const studioId = newId();
-  const now = new Date();
-  await db().batch([
-    db().insert(studios).values({ id: studioId, name: studioName, email: r.user.email, status: "pending", createdAt: now }),
-    db().insert(memberships).values({ studioId, userId: r.user.id, role: "owner", createdAt: now }),
-  ]);
+  const orgId = await createOrg(studioName, r.user.email, "creative");
+  await db().insert(memberships).values({ studioId: orgId, userId: r.user.id, role: "owner", createdAt: new Date() });
   await startSession(r.user.id);
   return null;
 }
 
-/** Joins an existing studio's team. Signs in an existing account (with its password), or creates one. */
+/**
+ * Joins an organisation from an invite. Signs in an existing account (with its password) or creates one.
+ * Someone who is alone in their own organisation moves across, bringing its deliveries; someone with colleagues
+ * elsewhere has to be removed there first.
+ */
 export async function joinStudio(
   studioId: string,
   a: NewAccount,
@@ -242,9 +293,22 @@ export async function joinStudio(
       return { error: "You already have an account with that email. Enter its password to join." };
     }
     const other = await db().query.memberships.findFirst({ where: eq(memberships.userId, user.id) });
-    if (other && other.studioId !== studioId) return { error: "That account already belongs to another studio." };
+    if (other && other.studioId !== studioId) {
+      const [{ n }] = await db().select({ n: sql<number>`count(*)` }).from(memberships).where(eq(memberships.studioId, other.studioId));
+      const [{ made }] = await db().select({ made: sql<number>`count(*)` }).from(projects).where(eq(projects.studioId, other.studioId));
+      if (Number(n) > 1 || Number(made) > 0) {
+        return { error: "That account already belongs to another organisation with its own team or deliveries. Ask its owner to remove you first." };
+      }
+      // Bring their received deliveries along, then leave the old (now empty) organisation.
+      const theirs = await db().select().from(orgDeliveries).where(eq(orgDeliveries.orgId, other.studioId));
+      for (const d of theirs) {
+        await db().insert(orgDeliveries).values({ ...d, orgId: studioId }).onConflictDoNothing();
+      }
+      await db().delete(studios).where(eq(studios.id, other.studioId));
+      if (theirs.length) await enableSide(studioId, "client");
+    }
   } else {
-    const r = await insertUser(a, "creative");
+    const r = await insertUser(a, "client");
     if ("error" in r) return r;
     user = r.user;
   }
@@ -267,11 +331,12 @@ export async function grantProjectAccess(slug: string): Promise<void> {
   (await cookies()).set(projectCookie(slug), token, { ...cookieBase, maxAge: 30 * 24 * 60 * 60 });
 }
 
-async function savedByMe(project: Project): Promise<boolean> {
-  const user = await currentUser();
-  if (!user) return false;
-  const row = await db().query.savedDeliveries.findFirst({
-    where: and(eq(savedDeliveries.userId, user.id), eq(savedDeliveries.projectId, project.id)),
+/** True when this delivery has been shared with the signed-in person's organisation. */
+export async function sharedWithMyOrg(project: Project): Promise<boolean> {
+  const s = await currentOrg();
+  if (!s) return false;
+  const row = await db().query.orgDeliveries.findFirst({
+    where: and(eq(orgDeliveries.orgId, s.studio.id), eq(orgDeliveries.projectId, project.id)),
   });
   return !!row;
 }
@@ -282,19 +347,23 @@ export async function hasProjectAccess(project: Project): Promise<boolean> {
   const token = (await cookies()).get(projectCookie(project.slug))?.value;
   const data = await verify<{ slug: string }>(token, secret());
   if (data?.slug === project.slug) return true;
-  // A signed-in client who unlocked it before doesn't need the password again.
-  return savedByMe(project);
+  // Shared with their organisation (added by the studio, or a colleague unlocked it): no password needed.
+  return sharedWithMyOrg(project);
 }
 
-/** Adds a delivery to the signed-in client's home page (call only once they've been let in). */
+/**
+ * Puts a delivery on the signed-in person's client dashboard (call only once they've been let in), and notes that
+ * their organisation has opened it. Skipped for the studio that made it, and for organisations without a client
+ * dashboard.
+ */
 export async function saveDelivery(project: Project): Promise<void> {
-  const user = await currentUser();
-  if (!user || (await managesProject(project))) return;
+  const s = await currentOrg();
+  if (!s || !s.user || !s.studio.client || s.studio.id === project.studioId) return;
   const now = new Date();
   await db()
-    .insert(savedDeliveries)
-    .values({ userId: user.id, projectId: project.id, savedAt: now, openedAt: now })
-    .onConflictDoUpdate({ target: [savedDeliveries.userId, savedDeliveries.projectId], set: { openedAt: now } });
+    .insert(orgDeliveries)
+    .values({ orgId: s.studio.id, projectId: project.id, savedAt: now, openedAt: now })
+    .onConflictDoUpdate({ target: [orgDeliveries.orgId, orgDeliveries.projectId], set: { openedAt: now } });
 }
 
 export function isExpired(project: Project): boolean {

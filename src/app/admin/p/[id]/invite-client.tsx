@@ -8,7 +8,7 @@ export function InviteClient({ projectId, known }: { projectId: string; known: {
   const [state, action, pending] = useActionState<InviteState, FormData>(inviteClient.bind(null, projectId), { error: "" });
   return (
     <form action={action} className="stack" style={{ gap: 8 }}>
-      <label htmlFor="invite-email" className="small" style={{ color: "var(--ink-2)" }}>Add a client by the email they signed up with</label>
+      <label htmlFor="invite-email" className="small" style={{ color: "var(--ink-2)" }}>Add a client by the email of anyone at their organisation</label>
       <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
         <input
           key={state.added ?? "form"}
@@ -30,7 +30,7 @@ export function InviteClient({ projectId, known }: { projectId: string; known: {
         ))}
       </datalist>
       {state.error ? <p className="error" role="alert" style={{ margin: 0 }}>{state.error}</p> : null}
-      {state.added ? <p className="small good" role="status" style={{ margin: 0 }}>Added. It&rsquo;s on {state.added}&rsquo;s deliveries page now.</p> : null}
+      {state.added ? <p className="small good" role="status" style={{ margin: 0 }}>Added. Everyone at {state.added} can see it on their dashboard now.</p> : null}
     </form>
   );
 }

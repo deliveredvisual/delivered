@@ -3,12 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { normaliseEmail, requireActiveStudio, requireProject, validEmail } from "@/lib/auth";
+import { enableSide, normaliseEmail, requireActiveStudio, requireProject, validEmail } from "@/lib/auth";
 import { logEvent } from "@/lib/queries";
 import { bucket, db } from "@/lib/env";
 import { hashPassword, newId, newSlug } from "@/lib/crypto";
 import { DAY, DELIVERY_DAYS } from "@/lib/format";
-import { comments, films, filmVersions, memberships, photos, projects, savedDeliveries, sets, users, type Project } from "@/db/schema";
+import { comments, films, filmVersions, memberships, orgDeliveries, photos, projects, sets, studios, users, type Project } from "@/db/schema";
 import { LANDING_LAYOUTS, LANDING_SPACING, validHex } from "@/lib/landing";
 
 export type FormState = { error: string };
@@ -135,38 +135,40 @@ export async function deleteProject(projectId: string) {
 export type InviteState = { error: string; added?: string };
 
 /**
- * Adds a delivery to a client's account by email: it appears on their "Your deliveries" page and opens without
- * the link or password. Only for people who already have a client account here.
+ * Shares a delivery with a client's organisation, found by the email of anyone in it: it appears on the client
+ * dashboard of everyone there (and anyone who joins later) and opens without the link or password.
  */
 export async function inviteClient(projectId: string, _prev: InviteState, form: FormData): Promise<InviteState> {
   const { s } = await requireProject(projectId);
   const email = normaliseEmail(str(form, "email", 200));
   if (!validEmail(email)) return { error: "Enter your client's email address." };
   const user = await db().query.users.findFirst({ where: eq(users.email, email) });
-  if (!user) {
+  const member = user ? await db().query.memberships.findFirst({ where: eq(memberships.userId, user.id) }) : null;
+  if (!user || !member) {
     return {
       error:
-        "No client account uses that email yet. Send them the client link instead: if they create an account and open it while signed in, it stays on their account.",
+        "No account uses that email yet. Send them the client link instead: once they create an account and open it while signed in, it stays on their dashboard.",
     };
   }
-  const inStudio = await db().query.memberships.findFirst({ where: eq(memberships.userId, user.id) });
-  if (inStudio || user.kind !== "client") {
-    return { error: "That email belongs to a creative's account, not a client's. Send them the client link instead." };
-  }
-  const existing = await db().query.savedDeliveries.findFirst({
-    where: and(eq(savedDeliveries.userId, user.id), eq(savedDeliveries.projectId, projectId)),
+  if (member.studioId === s.studio.id) return { error: "That's someone in your own organisation." };
+  const org = await db().query.studios.findFirst({ where: eq(studios.id, member.studioId) });
+  if (!org) return { error: "Couldn't find their organisation." };
+  const existing = await db().query.orgDeliveries.findFirst({
+    where: and(eq(orgDeliveries.orgId, org.id), eq(orgDeliveries.projectId, projectId)),
   });
-  if (existing) return { error: `${user.name} already has this delivery.` };
+  if (existing) return { error: `${org.name} already has this delivery.` };
   const by = s.user?.name || s.studio.name;
-  await db().insert(savedDeliveries).values({ userId: user.id, projectId, savedAt: new Date(), invitedBy: by });
-  await logEvent(projectId, by, "invite", user.name);
+  await db().insert(orgDeliveries).values({ orgId: org.id, projectId, savedAt: new Date(), addedBy: by });
+  // Being sent a delivery switches on their client dashboard, so they can see it.
+  if (!org.client) await enableSide(org.id, "client");
+  await logEvent(projectId, by, "invite", org.name);
   revalidatePath(`/admin/p/${projectId}`);
-  return { error: "", added: user.name };
+  return { error: "", added: org.name };
 }
 
-export async function removeClientAccess(projectId: string, userId: string) {
+export async function removeClientAccess(projectId: string, orgId: string) {
   await requireProject(projectId);
-  await db().delete(savedDeliveries).where(and(eq(savedDeliveries.projectId, projectId), eq(savedDeliveries.userId, userId)));
+  await db().delete(orgDeliveries).where(and(eq(orgDeliveries.projectId, projectId), eq(orgDeliveries.orgId, orgId)));
   revalidatePath(`/admin/p/${projectId}`);
 }
 

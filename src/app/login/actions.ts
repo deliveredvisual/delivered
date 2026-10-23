@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { currentStudio, signIn, signOut } from "@/lib/auth";
+import { currentOrg, homeFor, signIn, signOut } from "@/lib/auth";
 import { safeNext } from "@/lib/next-url";
 
 export type LoginState = { error: string; email?: string };
@@ -12,7 +12,7 @@ export async function login(_prev: LoginState, form: FormData): Promise<LoginSta
   if (!r.ok) return { error: r.error, email };
   const next = safeNext(form.get("next"));
   if (next) redirect(next);
-  redirect((await currentStudio()) ? "/admin" : "/me");
+  redirect(homeFor(await currentOrg()));
 }
 
 export async function logout(): Promise<void> {
