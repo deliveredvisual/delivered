@@ -290,10 +290,11 @@ export async function hasProjectAccess(project: Project): Promise<boolean> {
 export async function saveDelivery(project: Project): Promise<void> {
   const user = await currentUser();
   if (!user || (await managesProject(project))) return;
+  const now = new Date();
   await db()
     .insert(savedDeliveries)
-    .values({ userId: user.id, projectId: project.id, savedAt: new Date() })
-    .onConflictDoNothing();
+    .values({ userId: user.id, projectId: project.id, savedAt: now, openedAt: now })
+    .onConflictDoUpdate({ target: [savedDeliveries.userId, savedDeliveries.projectId], set: { openedAt: now } });
 }
 
 export function isExpired(project: Project): boolean {

@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { requireActiveStudio, requireProject } from "@/lib/auth";
+import { normaliseEmail, requireActiveStudio, requireProject, validEmail } from "@/lib/auth";
+import { logEvent } from "@/lib/queries";
 import { bucket, db } from "@/lib/env";
 import { hashPassword, newId, newSlug } from "@/lib/crypto";
 import { DAY, DELIVERY_DAYS } from "@/lib/format";
-import { comments, films, filmVersions, photos, projects, sets, type Project } from "@/db/schema";
+import { comments, films, filmVersions, memberships, photos, projects, savedDeliveries, sets, users, type Project } from "@/db/schema";
 import { LANDING_LAYOUTS, LANDING_SPACING, validHex } from "@/lib/landing";
 
 export type FormState = { error: string };
@@ -127,6 +128,46 @@ export async function deleteProject(projectId: string) {
   await db().delete(projects).where(eq(projects.id, projectId));
   revalidatePath("/admin");
   redirect("/admin?f=all");
+}
+
+// ---------- Clients with access ----------
+
+export type InviteState = { error: string; added?: string };
+
+/**
+ * Adds a delivery to a client's account by email: it appears on their "Your deliveries" page and opens without
+ * the link or password. Only for people who already have a client account here.
+ */
+export async function inviteClient(projectId: string, _prev: InviteState, form: FormData): Promise<InviteState> {
+  const { s } = await requireProject(projectId);
+  const email = normaliseEmail(str(form, "email", 200));
+  if (!validEmail(email)) return { error: "Enter your client's email address." };
+  const user = await db().query.users.findFirst({ where: eq(users.email, email) });
+  if (!user) {
+    return {
+      error:
+        "No client account uses that email yet. Send them the client link instead: if they create an account and open it while signed in, it stays on their account.",
+    };
+  }
+  const inStudio = await db().query.memberships.findFirst({ where: eq(memberships.userId, user.id) });
+  if (inStudio || user.kind !== "client") {
+    return { error: "That email belongs to a creative's account, not a client's. Send them the client link instead." };
+  }
+  const existing = await db().query.savedDeliveries.findFirst({
+    where: and(eq(savedDeliveries.userId, user.id), eq(savedDeliveries.projectId, projectId)),
+  });
+  if (existing) return { error: `${user.name} already has this delivery.` };
+  const by = s.user?.name || s.studio.name;
+  await db().insert(savedDeliveries).values({ userId: user.id, projectId, savedAt: new Date(), invitedBy: by });
+  await logEvent(projectId, by, "invite", user.name);
+  revalidatePath(`/admin/p/${projectId}`);
+  return { error: "", added: user.name };
+}
+
+export async function removeClientAccess(projectId: string, userId: string) {
+  await requireProject(projectId);
+  await db().delete(savedDeliveries).where(and(eq(savedDeliveries.projectId, projectId), eq(savedDeliveries.userId, userId)));
+  revalidatePath(`/admin/p/${projectId}`);
 }
 
 // ---------- Landing page ----------

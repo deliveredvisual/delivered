@@ -6,6 +6,10 @@ import { requireProject, studioFor } from "@/lib/auth";
 import { loadClientFolders } from "@/lib/chat";
 import { ClientShell } from "@/app/p/[slug]/client-shell";
 import { LandingForm } from "./landing-form";
+import { InviteClient } from "./invite-client";
+import { and, desc, eq, ne, notInArray } from "drizzle-orm";
+import { db } from "@/lib/env";
+import { projects as projectsTable, savedDeliveries, users } from "@/db/schema";
 import { describeEvent, getProjectFull, picksFor, recentEvents } from "@/lib/queries";
 import { daysLeft, formatBytes, formatDate, formatTimecode, plural, timeAgo } from "@/lib/format";
 import { fileUrl } from "@/lib/urls";
@@ -18,6 +22,7 @@ import {
   deleteVersion,
   extendProject,
   newLink,
+  removeClientAccess,
   renameSet,
   setArchived,
   updateProject,
@@ -38,6 +43,27 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
   if (!full) notFound();
   const { project: p, sets, photos, films } = full;
   const [picks, activity, clientFolders, studio] = await Promise.all([picksFor(p.id), recentEvents(p.id), loadClientFolders(p.id), studioFor(p)]);
+
+  // Client accounts with this delivery, and clients this studio has delivered to before (for quick picking).
+  const withAccess = await db()
+    .select({ id: users.id, name: users.name, email: users.email, company: users.company, invitedBy: savedDeliveries.invitedBy, openedAt: savedDeliveries.openedAt })
+    .from(savedDeliveries)
+    .innerJoin(users, eq(users.id, savedDeliveries.userId))
+    .where(eq(savedDeliveries.projectId, p.id))
+    .orderBy(desc(savedDeliveries.savedAt));
+  const known = await db()
+    .selectDistinct({ email: users.email, name: users.name, company: users.company })
+    .from(savedDeliveries)
+    .innerJoin(users, eq(users.id, savedDeliveries.userId))
+    .innerJoin(projectsTable, eq(projectsTable.id, savedDeliveries.projectId))
+    .where(
+      and(
+        eq(projectsTable.studioId, p.studioId),
+        ne(savedDeliveries.projectId, p.id),
+        withAccess.length ? notInArray(users.id, withAccess.map((u) => u.id)) : undefined,
+      ),
+    )
+    .limit(200);
 
   const h = await headers();
   const proto = h.get("x-forwarded-proto") ?? "https";
@@ -83,6 +109,39 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
         <div className="row">
           <a className="btn btn-small" href={`/p/${p.slug}`} target="_blank" rel="noreferrer">Open as client</a>
         </div>
+      </section>
+
+      {/* Clients with accounts */}
+      <section className="panel stack">
+        <div className="row between">
+          <h2 className="h3">Clients</h2>
+          <span className="small muted">Added clients see it on their deliveries page and don&rsquo;t need the link or password.</span>
+        </div>
+        {withAccess.length ? (
+          <ul className="stack" style={{ listStyle: "none", margin: 0, padding: 0, gap: 0 }}>
+            {withAccess.map((u) => (
+              <li key={u.id} className="row between" style={{ borderTop: "1px solid var(--line)", padding: "10px 0" }}>
+                <span className="stack" style={{ gap: 2 }}>
+                  <span style={{ fontWeight: 500 }}>
+                    {u.name}
+                    {u.company ? <span className="muted" style={{ fontWeight: 400 }}> · {u.company}</span> : null}
+                  </span>
+                  <span className="small muted">
+                    <span className="mono">{u.email}</span>
+                    {" · "}
+                    {u.invitedBy ? `added by ${u.invitedBy}` : "saved it from the link"}
+                    {" · "}
+                    {u.openedAt ? `last opened ${timeAgo(u.openedAt)}` : "not opened yet"}
+                  </span>
+                </span>
+                <form action={removeClientAccess.bind(null, p.id, u.id)}>
+                  <ConfirmButton message={`Remove ${u.name}? It comes off their deliveries page.${p.passwordHash ? "" : " The link itself still opens it, since this delivery has no password."}`}>Remove</ConfirmButton>
+                </form>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <InviteClient projectId={p.id} known={known} />
       </section>
 
       {/* Photos */}

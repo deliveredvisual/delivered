@@ -50,15 +50,17 @@ export const invites = sqliteTable(
   (t) => [index("invites_studio").on(t.studioId)],
 );
 
-/** Deliveries a signed-in client has opened, so they show up on their home page. */
+/** Deliveries on a client's home page: ones they've opened while signed in, or ones a studio invited them to. */
 export const savedDeliveries = sqliteTable(
   "saved_deliveries",
   {
     userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
     savedAt: integer("saved_at", { mode: "timestamp_ms" }).notNull(),
+    invitedBy: text("invited_by"), // who at the studio added them; null when they found it through the link
+    openedAt: integer("opened_at", { mode: "timestamp_ms" }), // last time they opened it
   },
-  (t) => [uniqueIndex("saved_unique").on(t.userId, t.projectId)],
+  (t) => [uniqueIndex("saved_unique").on(t.userId, t.projectId), index("saved_project").on(t.projectId)],
 );
 
 /** Failed sign-ins, to slow down password guessing. */

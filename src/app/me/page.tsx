@@ -21,6 +21,8 @@ export default async function MyDeliveries() {
     .select({
       project: projects,
       studio: studios.name,
+      invitedBy: savedDeliveries.invitedBy,
+      openedAt: savedDeliveries.openedAt,
       cover: sql<string | null>`(select coalesce(p.thumb_key, null) from photos p where p.project_id = "projects"."id" and p.thumb_key is not null order by p.sort, p.filename limit 1)`,
     })
     .from(savedDeliveries)
@@ -46,11 +48,11 @@ export default async function MyDeliveries() {
         <h1 className="h2" style={{ fontSize: 40 }}>Your deliveries</h1>
         {rows.length === 0 ? (
           <div className="notice" style={{ marginTop: 20, maxWidth: 560 }}>
-            Nothing here yet. When a studio sends you a delivery link, open it while you&rsquo;re signed in and it will be saved here.
+            Nothing here yet. When a studio adds you to a delivery it appears here, and so does any delivery link you open while signed in.
           </div>
         ) : (
           <div className="photo-grid">
-            {rows.map(({ project: p, studio, cover }) => {
+            {rows.map(({ project: p, studio, cover, openedAt }) => {
               const gone = isExpired(p);
               return (
                 <figure key={p.id} className="tile">
@@ -63,7 +65,10 @@ export default async function MyDeliveries() {
                     )}
                   </Link>
                   <figcaption className="stack" style={{ gap: 4 }}>
-                    <Link href={`/p/${p.slug}`} style={{ textDecoration: "none", fontWeight: 500, fontSize: 15 }}>{p.title}</Link>
+                    <span className="row" style={{ gap: 8 }}>
+                      <Link href={`/p/${p.slug}`} style={{ textDecoration: "none", fontWeight: 500, fontSize: 15 }}>{p.title}</Link>
+                      {!openedAt && !gone ? <span className="badge">New</span> : null}
+                    </span>
                     <span className="tile-cap" style={{ justifyContent: "flex-start" }}>
                       {studio}
                       {gone ? " · archived" : ` · live until ${formatDate(p.expiresAt)}`}

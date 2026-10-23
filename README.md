@@ -15,6 +15,8 @@ Runs entirely on Cloudflare: the app on Workers, the database on D1, files on R2
 - Messages: one chat per project shared by the studio and everyone on the client side, on every client page and on
   your project page. Photos, and films at an exact moment, can be pinned into messages; clicking a pin opens it
 - Clients can make their own folders to sort photos (a photo can be in several); you see them on your project page
+- Add a client to a delivery by the email of their client account (project page → Clients): it appears on their
+  deliveries page and opens without the link or password. Past clients are suggested as you type
 - Optional password per delivery; archived automatically after 365 days
 - Photos grouped into your folders, lightbox with keyboard controls (← → P Esc)
 - Personal selects for every person on the client side, plus a "Team selects" view
