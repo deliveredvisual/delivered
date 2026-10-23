@@ -112,6 +112,8 @@ export const projects = sqliteTable(
     landingIntro: text("landing_intro").notNull().default(""),
     landingSpacing: text("landing_spacing", { enum: ["tight", "normal", "airy"] }).notNull().default("normal"),
     landingGroupFolders: integer("landing_group_folders", { mode: "boolean" }).notNull().default(true),
+    landingTitleOnCover: integer("landing_title_on_cover", { mode: "boolean" }).notNull().default(false),
+    landingCoverDim: integer("landing_cover_dim").notNull().default(35), // percent of darkening when the title is on the cover
   },
   (t) => [uniqueIndex("projects_slug").on(t.slug), index("projects_studio").on(t.studioId)],
 );

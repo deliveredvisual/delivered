@@ -46,7 +46,10 @@ export default async function LandingPage({ params }: PageProps<"/p/[slug]">) {
               `Live until ${formatDate(p.expiresAt)}`,
             ].filter(Boolean),
             credit: p.licenceCredit,
+            date: formatDate(p.shotDate ?? p.createdAt.toISOString().slice(0, 10)),
           }}
+          titleOnCover={p.landingTitleOnCover}
+          coverDim={p.landingCoverDim}
           cover={cover ? { id: cover.id, previewKey: cover.previewKey, thumbKey: cover.thumbKey, width: cover.width, height: cover.height } : null}
           folders={full.sets.map((s) => ({ id: s.id, name: s.name }))}
           photos={photos.map((x) => ({ id: x.id, filename: x.filename, setId: x.setId, thumbKey: x.thumbKey, previewKey: x.previewKey, width: x.width, height: x.height }))}

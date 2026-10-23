@@ -13,7 +13,8 @@ export const metadata: Metadata = { title: "Gallery" };
 /** The working view: browse by folder, pick selects, sort into folders, download. */
 export default async function GalleryPage({ params, searchParams }: PageProps<"/p/[slug]/gallery">) {
   const { slug } = await params;
-  const focus = (await searchParams).photo;
+  const sp = await searchParams;
+  const focus = sp.photo;
   const opened = await openDelivery(slug);
   if ("screen" in opened) return opened.screen;
   const { project, studio, admin, viewer } = opened.ok;
@@ -56,6 +57,8 @@ export default async function GalleryPage({ params, searchParams }: PageProps<"/
           rawKey: project.rawEnabled || admin ? p.rawKey : null,
           size: p.size,
           rawSize: p.rawSize,
+          width: p.width,
+          height: p.height,
         }))}
         films={full.films
           .filter((f) => f.current)
@@ -72,6 +75,7 @@ export default async function GalleryPage({ params, searchParams }: PageProps<"/
         picks={picks.map((k) => ({ photoId: k.photoId, viewer: k.viewer }))}
         folders={folders}
         focus={typeof focus === "string" ? focus : undefined}
+        initialView={sp.view === "list" ? "list" : "grid"}
       />
     </ClientShell>
   );

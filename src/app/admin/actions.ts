@@ -199,6 +199,8 @@ export async function updateLanding(projectId: string, _prev: LandingState, form
       landingCoverId: coverId,
       landingIntro: str(form, "intro", 2000),
       landingGroupFolders: bool(form, "groupFolders"),
+      landingTitleOnCover: bool(form, "titleOnCover"),
+      landingCoverDim: Math.max(0, Math.min(80, Math.round(Number(str(form, "coverDim", 3)) || 0))),
     })
     .where(eq(projects.id, projectId));
   revalidatePath(`/admin/p/${projectId}`);
@@ -213,6 +215,21 @@ export async function addSet(projectId: string, form: FormData) {
   if (!name) return;
   const [{ n }] = await db().select({ n: sql<number>`count(*)` }).from(sets).where(eq(sets.projectId, projectId));
   await db().insert(sets).values({ id: newId(), projectId, name, sort: Number(n) });
+  revalidatePath(`/admin/p/${projectId}`);
+}
+
+/** Saves the photo order (the full list of this project's photo ids, first to last). */
+export async function reorderPhotos(projectId: string, photoIds: string[]) {
+  await requireProject(projectId);
+  const ids = photoIds.filter((x) => /^[a-z0-9]{16}$/.test(x)).slice(0, 20000);
+  for (let i = 0; i < ids.length; i += 200) {
+    const chunk = ids.slice(i, i + 200);
+    const cases = sql.join(chunk.map((id, j) => sql`when ${id} then ${i + j}`), sql` `);
+    await db()
+      .update(photos)
+      .set({ sort: sql`case ${photos.id} ${cases} else ${photos.sort} end` })
+      .where(and(eq(photos.projectId, projectId), inArray(photos.id, chunk)));
+  }
   revalidatePath(`/admin/p/${projectId}`);
 }
 

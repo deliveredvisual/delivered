@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { fileUrl } from "@/lib/urls";
 import { formatBytes } from "@/lib/format";
-import { createSetWithPhotos, deletePhotos, movePhotos } from "../../actions";
+import { createSetWithPhotos, deletePhotos, movePhotos, reorderPhotos } from "../../actions";
 
 type PhotoLite = {
   id: string;
@@ -15,6 +15,7 @@ type PhotoLite = {
   size: number;
   rawSize: number;
   picks: number;
+  createdAt: number;
 };
 
 export function PhotoManager({
@@ -32,10 +33,46 @@ export function PhotoManager({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [target, setTarget] = useState<string>(sets[0]?.id ?? "__new");
   const [pending, start] = useTransition();
+  // The photo order, as ids from first to last. Dragging, sorting or "move to start/end" changes it and saves.
+  const [order, setOrder] = useState(() => photos.map((p) => p.id));
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const [saving, startSave] = useTransition();
+  const byId = useMemo(() => new Map(photos.map((p) => [p.id, p])), [photos]);
+  const ordered = useMemo(() => order.map((id) => byId.get(id)).filter((p): p is PhotoLite => !!p), [order, byId]);
+
+  function saveOrder(next: string[]) {
+    setOrder(next);
+    startSave(() => reorderPhotos(projectId, next));
+  }
+
+  function dropOn(targetId: string) {
+    if (!dragId || dragId === targetId) return;
+    const moving = selected.has(dragId) ? order.filter((id) => selected.has(id)) : [dragId];
+    const rest = order.filter((id) => !moving.includes(id));
+    const from = order.indexOf(dragId);
+    const to = order.indexOf(targetId);
+    let at = rest.indexOf(targetId);
+    if (from < to) at += 1; // dragging forward drops after the target
+    saveOrder([...rest.slice(0, at), ...moving, ...rest.slice(at)]);
+  }
+
+  function moveSelected(where: "start" | "end") {
+    const moving = order.filter((id) => selected.has(id));
+    const rest = order.filter((id) => !selected.has(id));
+    saveOrder(where === "start" ? [...moving, ...rest] : [...rest, ...moving]);
+  }
+
+  function sortBy(how: "name" | "upload") {
+    const list = [...photos];
+    if (how === "name") list.sort((a, b) => a.filename.localeCompare(b.filename, undefined, { numeric: true, sensitivity: "base" }));
+    else list.sort((a, b) => a.createdAt - b.createdAt || a.filename.localeCompare(b.filename, undefined, { numeric: true }));
+    saveOrder(list.map((p) => p.id));
+  }
 
   const shown = useMemo(
     () =>
-      photos.filter((p) =>
+      ordered.filter((p) =>
         filter === "all"
           ? true
           : filter === "none"
@@ -46,7 +83,7 @@ export function PhotoManager({
                 ? !!clientFolders.find((f) => `cf:${f.id}` === filter)?.photoIds.includes(p.id)
                 : p.setId === filter,
       ),
-    [photos, filter, clientFolders],
+    [ordered, filter, clientFolders],
   );
 
   const toggle = (id: string) =>
@@ -112,6 +149,8 @@ export function PhotoManager({
                   Move
                 </button>
               </>
+            <button type="button" className="btn btn-small" disabled={saving} onClick={() => moveSelected("start")}>Move to start</button>
+            <button type="button" className="btn btn-small" disabled={saving} onClick={() => moveSelected("end")}>Move to end</button>
             <button
               type="button"
               className="btn btn-small btn-danger"
@@ -131,12 +170,45 @@ export function PhotoManager({
         </div>
       ) : null}
 
+      <div className="row between small" style={{ gap: 8 }}>
+        <span className="muted">Drag photos to change their order. Clients see this order everywhere. {saving ? "Saving…" : ""}</span>
+        <span className="row" style={{ gap: 6 }}>
+          <button type="button" className="btn btn-small" onClick={() => sortBy("name")} disabled={saving}>Sort by file name</button>
+          <button type="button" className="btn btn-small" onClick={() => sortBy("upload")} disabled={saving}>Sort by upload order</button>
+        </span>
+      </div>
+
       {shown.length === 0 ? (
         <p className="muted small">No photos here yet.</p>
       ) : (
         <div className="thumbs-admin">
           {shown.map((p) => (
-            <figure key={p.id}>
+            <figure
+              key={p.id}
+              draggable
+              onDragStart={(e) => {
+                setDragId(p.id);
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", p.id);
+              }}
+              onDragOver={(e) => {
+                if (!dragId) return;
+                e.preventDefault();
+                if (overId !== p.id) setOverId(p.id);
+              }}
+              onDragLeave={() => setOverId((o) => (o === p.id ? null : o))}
+              onDrop={(e) => {
+                e.preventDefault();
+                dropOn(p.id);
+                setDragId(null);
+                setOverId(null);
+              }}
+              onDragEnd={() => {
+                setDragId(null);
+                setOverId(null);
+              }}
+              className={`${dragId === p.id ? "dragging" : ""}${overId === p.id && dragId !== p.id ? " drop-target" : ""}`}
+            >
               <label className="t" style={{ position: "relative", display: "block", cursor: "pointer", outline: selected.has(p.id) ? "2px solid var(--ink)" : "none", outlineOffset: 2 }}>
                 {p.thumbKey ? (
                   // eslint-disable-next-line @next/next/no-img-element

@@ -10,8 +10,10 @@ Runs entirely on Cloudflare: the app on Workers, the database on D1, files on R2
 **For clients** (`/p/<link>`)
 - The link opens a landing page: cover photo, your note, films pinned at the top, then every photo in high
   resolution. Per project you choose the layout (collage, masonry, grid, large), background colour, spacing, cover
-  and whether photos are split into sections by folder
-- "Select & download" leads to the working gallery (`/p/<link>/gallery`)
+  whether photos are split into sections by folder, and whether the
+  title and date sit over a darkened cover
+- "Select & download" leads to the working gallery (`/p/<link>/gallery`), which switches between a picture grid and a plain
+  file list (thumbnail, name, folder, size, per-file downloads)
 - Messages: one chat per project shared by the studio and everyone on the client side, on every client page and on
   your project page. Photos, and films at an exact moment, can be pinned into messages; clicking a pin opens it
 - Clients can make their own folders to sort photos (a photo can be in several); you see them on your project page
@@ -45,6 +47,8 @@ Runs entirely on Cloudflare: the app on Workers, the database on D1, files on R2
 - Projects list with time left and latest client activity
 - Drag-and-drop upload of JPEGs and RAWs; RAWs pair with their JPEG by file name
 - Files of any size: uploads go up in 32 MB chunks; previews and thumbnails are made in your browser
+- Drag photos into order (or sort by file name / upload order, or move a selection to the start or end);
+  clients see that order everywhere
 - Folders for photos (create one while moving photos), see what each client picked and how they sorted
   them, full activity log
 - Landing page settings per project, with a preview link

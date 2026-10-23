@@ -30,7 +30,9 @@ export function Landing(props: {
   layout: Layout;
   groupFolders: boolean;
   nda: boolean;
-  project: { title: string; eyebrow: string; intro: string; meta: string[]; credit: string };
+  project: { title: string; eyebrow: string; intro: string; meta: string[]; credit: string; date: string };
+  titleOnCover: boolean;
+  coverDim: number;
   cover: { id: string; previewKey: string | null; thumbKey: string | null; width: number | null; height: number | null } | null;
   folders: { id: string; name: string }[];
   photos: LPhoto[];
@@ -39,6 +41,7 @@ export function Landing(props: {
   const { slug, layout, photos, films, project, cover } = props;
   const { pin, openChat } = useShell();
   const [open, setOpen] = useState<number | null>(null);
+  const overlay = props.titleOnCover && !!cover;
   const noSave = props.nda ? { onContextMenu: (e: React.MouseEvent) => e.preventDefault(), draggable: false } : {};
 
   // Photos grouped by the studio's folders (in folder order), or all together.
@@ -109,13 +112,23 @@ export function Landing(props: {
         <div className="landing-hero">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img {...srcFor(cover)} sizes="100vw" alt="" fetchPriority="high" {...noSave} />
+          {overlay ? (
+            <>
+              <div className="landing-hero-shade" style={{ background: `linear-gradient(to top, rgba(0,0,0,${Math.min(0.9, props.coverDim / 100 + 0.2)}) 0%, rgba(0,0,0,${props.coverDim / 100}) 45%, rgba(0,0,0,${props.coverDim / 100}) 100%)` }} />
+              <div className="landing-hero-text">
+                {project.eyebrow ? <div className="eyebrow" style={{ color: "rgba(255,255,255,0.8)" }}>{project.eyebrow}</div> : null}
+                <h1 className="h1" style={{ fontSize: "clamp(40px, 7vw, 96px)", color: "#fff" }}>{project.title}</h1>
+                <div style={{ fontSize: "clamp(14px, 1.4vw, 17px)", color: "rgba(255,255,255,0.88)" }}>{project.date}</div>
+              </div>
+            </>
+          ) : null}
         </div>
       ) : null}
 
       <section className="landing-head">
         <div className="stack" style={{ gap: 14, maxWidth: 820 }}>
-          {project.eyebrow ? <div className="eyebrow">{project.eyebrow}</div> : null}
-          <h1 className="h1" style={{ fontSize: "clamp(40px, 6.5vw, 84px)" }}>{project.title}</h1>
+          {overlay ? null : project.eyebrow ? <div className="eyebrow">{project.eyebrow}</div> : null}
+          {overlay ? null : <h1 className="h1" style={{ fontSize: "clamp(40px, 6.5vw, 84px)" }}>{project.title}</h1>}
           {project.intro ? <p className="landing-intro">{project.intro}</p> : null}
           <div className="meta" style={{ color: "var(--ink-2)" }}>
             {project.meta.map((m) => <span key={m}>{m}</span>)}

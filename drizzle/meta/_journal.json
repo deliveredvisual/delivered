@@ -43,6 +43,13 @@
       "when": 1792734658176,
       "tag": "0005_organisations",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792735652329,
+      "tag": "0006_cover_title",
+      "breakpoints": true
     }
   ]
 }

@@ -5,7 +5,7 @@ import { fileUrl } from "@/lib/urls";
 import { LANDING_LAYOUTS, LANDING_SWATCHES, landingTheme, validHex } from "@/lib/landing";
 import { updateLanding, type LandingState } from "../../actions";
 
-type Settings = { layout: string; bg: string; coverId: string | null; intro: string; spacing: string; groupFolders: boolean };
+type Settings = { layout: string; bg: string; coverId: string | null; intro: string; spacing: string; groupFolders: boolean; titleOnCover: boolean; coverDim: number };
 
 /** Little drawings of each layout, so the choice is obvious at a glance. */
 function LayoutSketch({ id }: { id: string }) {
@@ -41,13 +41,28 @@ function LayoutSketch({ id }: { id: string }) {
   );
 }
 
-export function LandingForm({ projectId, settings, photos }: { projectId: string; settings: Settings; photos: { id: string; filename: string; thumbKey: string | null }[] }) {
+export function LandingForm({
+  projectId,
+  settings,
+  photos,
+  title,
+  date,
+}: {
+  projectId: string;
+  settings: Settings;
+  photos: { id: string; filename: string; thumbKey: string | null }[];
+  title: string;
+  date: string;
+}) {
   const [state, action, pending] = useActionState<LandingState, FormData>(updateLanding.bind(null, projectId), { error: "" });
   const [layout, setLayout] = useState(settings.layout);
   const [bg, setBg] = useState(settings.bg);
   const [custom, setCustom] = useState(settings.bg);
   const [spacing, setSpacing] = useState(settings.spacing);
   const [cover, setCover] = useState(settings.coverId ?? "");
+  const [onCover, setOnCover] = useState(settings.titleOnCover);
+  const [dim, setDim] = useState(settings.coverDim);
+  const coverThumb = (photos.find((ph) => ph.id === cover) ?? photos[0])?.thumbKey ?? null;
   const [dirty, setDirty] = useState(false);
   const setSaved = (v: boolean) => setDirty(!v);
   const theme = landingTheme(bg) as React.CSSProperties;
@@ -131,6 +146,35 @@ export function LandingForm({ projectId, settings, photos }: { projectId: string
           </div>
         ) : (
           <p className="small muted" style={{ margin: 0 }}>Upload photos to choose a cover. Until then the page opens with the title.</p>
+        )}
+      </fieldset>
+
+      <fieldset className="stack" style={{ border: 0, padding: 0, margin: 0, gap: 12 }}>
+        <legend className="h3" style={{ marginBottom: 10 }}>Title on the cover</legend>
+        <label className="check">
+          <input type="checkbox" name="titleOnCover" checked={onCover} onChange={(e) => { setOnCover(e.target.checked); setDirty(true); }} />
+          <span>Show the title and date over the cover photo, with the photo darkened so they read clearly</span>
+        </label>
+        {onCover ? (
+          <div className="row" style={{ gap: 20, alignItems: "flex-start" }}>
+            <div className="field" style={{ minWidth: 240 }}>
+              <label htmlFor="cover-dim">Darken the photo: <span className="mono">{dim}%</span></label>
+              <input id="cover-dim" name="coverDim" type="range" min={0} max={80} step={5} value={dim} onChange={(e) => { setDim(Number(e.target.value)); setDirty(true); }} />
+            </div>
+            <div className="cover-preview" aria-hidden="true">
+              {coverThumb ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={fileUrl(coverThumb)} alt="" />
+              ) : null}
+              <div className="cover-shade" style={{ background: `rgba(0,0,0,${dim / 100})` }} />
+              <div className="cover-text">
+                <div style={{ fontSize: 15, fontWeight: 500, lineHeight: 1.1 }}>{title}</div>
+                <div style={{ fontSize: 10, opacity: 0.85 }}>{date}</div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <input type="hidden" name="coverDim" value={dim} />
         )}
       </fieldset>
 

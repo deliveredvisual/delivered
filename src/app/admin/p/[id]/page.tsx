@@ -182,6 +182,7 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
         <PhotoUploader projectId={p.id} sets={sets.map((s) => ({ id: s.id, name: s.name }))} />
 
         <PhotoManager
+          key={`${photos.length}-${photos.map((x) => x.setId ?? "").join("").length}-${photos.at(-1)?.id ?? ""}`}
           projectId={p.id}
           sets={sets.map((s) => ({ id: s.id, name: s.name }))}
           photos={photos.map((x) => ({
@@ -194,6 +195,7 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
             size: x.size,
             rawSize: x.rawSize,
             picks: pickCount.get(x.id) ?? 0,
+            createdAt: x.createdAt.getTime(),
           }))}
           clientFolders={clientFolders}
         />
@@ -277,7 +279,9 @@ export default async function ProjectAdminPage({ params }: PageProps<"/admin/p/[
         </p>
         <LandingForm
           projectId={p.id}
-          settings={{ layout: p.landingLayout, bg: p.landingBg, coverId: p.landingCoverId, intro: p.landingIntro, spacing: p.landingSpacing, groupFolders: p.landingGroupFolders }}
+          settings={{ layout: p.landingLayout, bg: p.landingBg, coverId: p.landingCoverId, intro: p.landingIntro, spacing: p.landingSpacing, groupFolders: p.landingGroupFolders, titleOnCover: p.landingTitleOnCover, coverDim: p.landingCoverDim }}
+          title={p.title}
+          date={formatDate(p.shotDate ?? p.createdAt.toISOString().slice(0, 10))}
           photos={photos.filter((x) => x.thumbKey).map((x) => ({ id: x.id, filename: x.filename, thumbKey: x.thumbKey }))}
         />
       </section>

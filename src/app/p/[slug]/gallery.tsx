@@ -19,6 +19,8 @@ export type GalleryPhoto = {
   rawKey: string | null;
   size: number;
   rawSize: number;
+  width?: number | null;
+  height?: number | null;
 };
 
 export type GalleryFilm = {
@@ -51,6 +53,8 @@ export type GalleryProps = {
   folders: FolderView[];
   /** Open this photo straight away (from a pinned photo in the chat). */
   focus?: string;
+  /** "grid" (pictures) or "list" (a plain list of files). */
+  initialView?: "grid" | "list";
 };
 
 type Preset = "full" | "web" | "raw";
@@ -82,6 +86,15 @@ export function Gallery(props: GalleryProps) {
   const [dlState, setDlState] = useState<{ label: string; done: number; total: number } | null>(null);
   const [dlError, setDlError] = useState("");
   const [visible, setVisible] = useState(60);
+  const [view, setViewState] = useState<"grid" | "list">(props.initialView ?? "grid");
+  // Remember the choice in the address, so a refresh or a shared link keeps it.
+  function setView(v: "grid" | "list") {
+    setViewState(v);
+    const url = new URL(window.location.href);
+    if (v === "list") url.searchParams.set("view", "list");
+    else url.searchParams.delete("view");
+    window.history.replaceState(null, "", url);
+  }
   const [newFolder, setNewFolder] = useState("");
   const [withSelects, setWithSelects] = useState(true);
   const [folderError, setFolderError] = useState("");
@@ -338,6 +351,16 @@ export function Gallery(props: GalleryProps) {
               ))}
             </nav>
             <div className="row" style={{ padding: "8px 0" }}>
+              <div className="switcher" role="group" aria-label="Show photos as">
+                <button type="button" aria-pressed={view === "grid"} onClick={() => setView("grid")}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" /></svg>
+                  Grid
+                </button>
+                <button type="button" aria-pressed={view === "list"} onClick={() => setView("list")}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+                  List
+                </button>
+              </div>
               <div className="dl-wrap">
                 <button type="button" className="btn" aria-expanded={fdOpen} onClick={() => { setFdOpen((o) => !o); setDlOpen(false); }}>
                   <FolderIcon /> Folders
@@ -461,6 +484,66 @@ export function Gallery(props: GalleryProps) {
           ) : null}
           {dlError ? <p className="error" role="alert" style={{ paddingTop: 12 }}>{dlError}</p> : null}
 
+          {view === "list" ? (
+            <div className="file-list-box">
+              <table className="file-list">
+                <thead>
+                  <tr>
+                    <th scope="col" className="fl-pick"><span className="sr-only">Selected</span></th>
+                    <th scope="col"><span className="sr-only">Preview</span></th>
+                    <th scope="col">File</th>
+                    <th scope="col" className="fl-wide">Folder</th>
+                    <th scope="col" className="fl-wide">Size</th>
+                    <th scope="col"><span className="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.slice(0, visible).map((p, i) => (
+                    <tr key={p.id} aria-selected={mine.has(p.id)}>
+                      <td className="fl-pick">
+                        <input
+                          type="checkbox"
+                          checked={mine.has(p.id)}
+                          onChange={() => togglePick(p.id)}
+                          aria-label={`${mine.has(p.id) ? "Remove" : "Add"} ${p.filename} ${mine.has(p.id) ? "from" : "to"} your selects`}
+                        />
+                      </td>
+                      <td>
+                        <button type="button" className="fl-thumb" onClick={() => setOpen(i)} aria-label={`View ${p.filename}`}>
+                          {p.thumbKey ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={fileUrl(p.thumbKey)} alt="" loading="lazy" {...noSave} />
+                          ) : null}
+                        </button>
+                      </td>
+                      <td>
+                        <button type="button" className="fl-name" onClick={() => setOpen(i)}>{p.filename}</button>
+                        <div className="small muted">
+                          {p.width && p.height ? `${p.width} × ${p.height}` : ""}
+                          {p.rawKey ? `${p.width ? " · " : ""}RAW ${formatBytes(p.rawSize)}` : ""}
+                          {others.length && picks.some((k) => k.photoId === p.id && k.viewer !== viewer)
+                            ? ` · picked by ${picks.filter((k) => k.photoId === p.id && k.viewer !== viewer).map((k) => k.viewer.split(" ")[0]).join(", ")}`
+                            : ""}
+                        </div>
+                      </td>
+                      <td className="fl-wide small">{setName(p.setId) || <span className="muted">—</span>}</td>
+                      <td className="fl-wide small mono">{formatBytes(p.size)}</td>
+                      <td>
+                        <span className="row fl-actions" style={{ gap: 6, justifyContent: "flex-end", flexWrap: "nowrap" }}>
+                          <button type="button" className="btn btn-small" onClick={() => pinPhoto(p)} aria-label={`Pin ${p.filename} to a message`} title="Pin to a message"><PinIcon /></button>
+                          {p.previewKey ? <a className="btn btn-small" href={fileUrl(p.previewKey, baseName(p.filename) + "_web.jpg")} aria-label={`Download ${p.filename} web size`}>Web</a> : null}
+                          {p.originalKey ? <a className="btn btn-small" href={fileUrl(p.originalKey, p.filename)} aria-label={`Download ${p.filename} full resolution`}>Full</a> : null}
+                          {openFolder ? (
+                            <button type="button" className="btn btn-small" onClick={() => folderOp({ op: "folder_remove", folderId: openFolder.id, photoIds: [p.id] })} aria-label={`Remove ${p.filename} from folder`}>Remove</button>
+                          ) : null}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
           <section aria-label="Photos" className="photo-grid">
             {shown.slice(0, visible).map((p, i) => (
               <figure key={p.id} className="tile">
@@ -494,6 +577,7 @@ export function Gallery(props: GalleryProps) {
               </figure>
             ))}
           </section>
+          )}
           {shown.length > visible ? (
             <div className="row" style={{ justifyContent: "center", paddingTop: 48 }}>
               <button type="button" className="btn" onClick={() => setVisible((v) => v + 60)}>
