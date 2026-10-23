@@ -9,12 +9,12 @@
     "binding": "ASSETS"
   },
   "observability": { "enabled": true },
-  // Database: create with `npx wrangler d1 create delivered-visual`, then paste the id here.
+  // Database: created in the Cloudflare dashboard (D1 → delivered-visual).
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "delivered-visual",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "d9285aed-60dc-46b3-bb82-a3b1b089bdcc",
       "migrations_dir": "drizzle"
     }
   ],
