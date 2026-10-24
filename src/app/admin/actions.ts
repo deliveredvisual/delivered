@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { enableSide, normaliseEmail, requireActiveStudio, requireProject, validEmail } from "@/lib/auth";
 import { logEvent, logStudio } from "@/lib/history";
+import { queueProjectFolder } from "@/lib/cloud/jobs";
 import { bucket, db } from "@/lib/env";
 import { hashPassword, newId, newSlug } from "@/lib/crypto";
 import { DAY, DELIVERY_DAYS, formatDate, plural } from "@/lib/format";
@@ -65,6 +66,7 @@ export async function createProject(_prev: FormState, form: FormData): Promise<F
       .values(setNames.map((name, i) => ({ id: newId(), projectId: id, name, sort: i })));
   }
   await logStudio(id, "create");
+  await queueProjectFolder(id);
   revalidatePath("/admin");
   redirect(`/admin/p/${id}`);
 }

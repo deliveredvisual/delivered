@@ -8,13 +8,17 @@ import { invites, memberships, users } from "@/db/schema";
 import { AppHeader } from "@/components/app-header";
 import { CopyLink } from "../admin/p/[id]/copy-link";
 import { ConfirmButton } from "../admin/confirm-button";
-import { activateSide, createInvite, removeMember, revokeInvite } from "./actions";
+import { activateSide, createInvite, disconnectCloud, removeMember, retryCloud, revokeInvite } from "./actions";
+import { linksFor, studioCounts } from "@/lib/cloud/jobs";
+import { PROVIDERS, credentials } from "@/lib/cloud/providers";
+import { plural } from "@/lib/format";
 import { ClaimForm, StudioForm } from "./forms";
 
 export const metadata: Metadata = { title: "Team" };
 
 /** The organisation: its name, which dashboards it has, who's in it, and invite links for colleagues. */
-export default async function TeamPage() {
+export default async function TeamPage({ searchParams }: PageProps<"/team">) {
+  const sp = await searchParams;
   const s = await requireOrg();
   const { studio: org, role, user } = s;
   const owner = role === "owner";
@@ -34,6 +38,8 @@ export default async function TeamPage() {
   const h = await headers();
   const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
   const hasOwnerAccount = team.some((t) => t.role === "owner");
+  const [links, count] = org.creative ? await Promise.all([linksFor(org.id), studioCounts(org.id)]) : [[], () => 0];
+  const cloudMsg = typeof sp.cloud === "string" ? sp.cloud : "";
 
   return (
     <>
@@ -93,6 +99,65 @@ export default async function TeamPage() {
           <section className="stack" style={{ gap: 16 }}>
             <h2 className="h3">Organisation</h2>
             <StudioForm name={org.name} email={org.email} />
+          </section>
+        ) : null}
+
+        {org.creative ? (
+          <section id="cloud" className="stack" style={{ gap: 16 }}>
+            <h2 className="h3">Copy uploads to Dropbox and Google Drive</h2>
+            <p className="muted small" style={{ margin: 0, maxWidth: 640 }}>
+              Every photo, RAW and video uploaded to a project is copied across automatically, into a folder for that project:
+              in Dropbox under Apps › Delivered Visual, in Google Drive under &ldquo;Delivered Visual&rdquo;. It only goes one way:
+              moving, renaming or deleting on this site doesn&rsquo;t change the copies.
+            </p>
+            {cloudMsg.startsWith("connected-") ? <p className="small good" role="status" style={{ margin: 0 }}>Connected. New uploads will be copied across.</p> : null}
+            {cloudMsg === "failed" ? <p className="error" role="alert" style={{ margin: 0 }}>That didn&rsquo;t connect. Try again.</p> : null}
+            {cloudMsg === "cancelled" ? <p className="small muted" role="status" style={{ margin: 0 }}>Cancelled: nothing was connected.</p> : null}
+            <div className="dash-cards">
+              {PROVIDERS.map((pv) => {
+                const link = links.find((l) => l.provider === pv.id);
+                const ready = !!credentials(pv.id);
+                const failed = count(pv.id, "failed");
+                const waiting = count(pv.id, "waiting");
+                return (
+                  <div key={pv.id} className="panel stack" style={{ gap: 10 }}>
+                    <div className="row between">
+                      <span style={{ fontWeight: 600 }}>{pv.name}</span>
+                      <span className={`small ${link ? (link.error ? "warn" : "good") : "muted"}`}>{link ? (link.error ? "Needs reconnecting" : "Connected") : "Off"}</span>
+                    </div>
+                    {link ? (
+                      <>
+                        <p className="small muted" style={{ margin: 0 }}>
+                          {link.account ? <>{link.account}<br /></> : null}
+                          {plural(count(pv.id, "done"), "file")} copied so far{waiting ? `, ${waiting} on the way` : ""}.
+                        </p>
+                        {link.error ? <p className="small warn" style={{ margin: 0 }}>{link.error}</p> : null}
+                        {failed ? (
+                          <div className="row small">
+                            <span className="warn">{plural(failed, "file")} couldn&rsquo;t be copied.</span>
+                            <form action={retryCloud.bind(null, pv.id)}><button type="submit" className="btn btn-small">Try again</button></form>
+                          </div>
+                        ) : null}
+                        {owner ? (
+                          <div className="row">
+                            {link.error ? <a className="btn btn-small btn-primary" href={`/api/cloud/${pv.id}/connect`}>Reconnect</a> : null}
+                            <form action={disconnectCloud.bind(null, pv.id)}>
+                              <ConfirmButton message={`Stop copying to ${pv.name}? Files already there stay.`}>Disconnect</ConfirmButton>
+                            </form>
+                          </div>
+                        ) : null}
+                      </>
+                    ) : !ready ? (
+                      <p className="small muted" style={{ margin: 0 }}>Not available yet: {pv.name} still needs setting up for this site.</p>
+                    ) : owner ? (
+                      <div><a className="btn btn-small" href={`/api/cloud/${pv.id}/connect`}>Connect {pv.name}</a></div>
+                    ) : (
+                      <p className="small muted" style={{ margin: 0 }}>The owner of {org.name} can connect it.</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </section>
         ) : null}
 

@@ -13,6 +13,8 @@ import { memberships, orgDeliveries, projects as projectsTable, studios as studi
 import { getProjectFull, picksFor } from "@/lib/queries";
 import { HistoryPanel } from "@/components/history-panel";
 import { TabRow } from "@/components/tab-scroll";
+import { projectStatus } from "@/lib/cloud/jobs";
+import { CloudStatusLine } from "./cloud-status";
 import { daysLeft, formatBytes, formatDate, formatTimecode, plural, timeAgo } from "@/lib/format";
 import { fileUrl } from "@/lib/urls";
 import {
@@ -60,7 +62,7 @@ export default async function ProjectAdminPage({ params, searchParams }: PagePro
   const full = await getProjectFull(id);
   if (!full) notFound();
   const { project: p, sets, photos, films } = full;
-  const [picks, clientFolders, studio] = await Promise.all([picksFor(p.id), loadClientFolders(p.id), studioFor(p)]);
+  const [picks, clientFolders, studio, cloud] = await Promise.all([picksFor(p.id), loadClientFolders(p.id), studioFor(p), projectStatus(p.id, p.studioId)]);
 
   // Client organisations with this delivery.
   const withAccess = await db()
@@ -111,6 +113,7 @@ export default async function ProjectAdminPage({ params, searchParams }: PagePro
           <a className="btn" href={`/p/${p.slug}`} target="_blank" rel="noreferrer">Open as client ↗</a>
         </div>
         <span className="small muted">{p.passwordHash ? "Password protected." : "No password: anyone with the link can open it."}</span>
+        <CloudStatusLine key={`${photos.length}-${films.reduce((n, f) => n + f.versions.length, 0)}`} projectId={p.id} initial={cloud} />
       </section>
 
       <TabRow className="page-tabs" label="Project">

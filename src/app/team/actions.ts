@@ -85,3 +85,19 @@ export async function claimOwnerAccount(_prev: { error: string }, form: FormData
   revalidatePath("/", "layout");
   return { error: "" };
 }
+
+/** Team page → "Disconnect": stops copying to Dropbox / Google Drive. What's already there stays. */
+export async function disconnectCloud(provider: "dropbox" | "gdrive") {
+  const s = await requireOwner();
+  const { removeLink } = await import("@/lib/cloud/jobs");
+  await removeLink(s.studio.id, provider);
+  revalidatePath("/team");
+}
+
+/** Team page → "Try again": puts every failed copy for this service back in line. */
+export async function retryCloud(provider: "dropbox" | "gdrive") {
+  const s = await requireOrg();
+  const { retryFailed } = await import("@/lib/cloud/jobs");
+  await retryFailed(s.studio.id, provider);
+  revalidatePath("/team");
+}

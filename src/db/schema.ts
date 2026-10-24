@@ -283,3 +283,73 @@ export type FilmVersion = typeof filmVersions.$inferSelect;
 export type Comment = typeof comments.$inferSelect;
 export type Studio = typeof studios.$inferSelect;
 export type User = typeof users.$inferSelect;
+
+// ---------- Copies to Dropbox and Google Drive ----------
+
+export type CloudProvider = "dropbox" | "gdrive";
+
+/** A studio's connection to Dropbox or Google Drive. Every upload to its projects is copied there (one way). */
+export const cloudLinks = sqliteTable(
+  "cloud_links",
+  {
+    studioId: text("studio_id").notNull().references(() => studios.id, { onDelete: "cascade" }),
+    provider: text("provider", { enum: ["dropbox", "gdrive"] }).notNull(),
+    account: text("account").notNull().default(""), // the account's name or email, shown on the Team page
+    refreshToken: text("refresh_token").notNull(), // encrypted
+    accessToken: text("access_token"), // encrypted, short-lived
+    accessExpires: integer("access_expires", { mode: "timestamp_ms" }),
+    rootId: text("root_id"), // Google Drive: the "Delivered Visual" folder's id
+    connectedBy: text("connected_by").notNull().default(""),
+    error: text("error"), // set when the connection stopped working (e.g. access was removed); copying pauses
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [uniqueIndex("cloud_links_unique").on(t.studioId, t.provider)],
+);
+
+/** Folders made on Dropbox / Google Drive, so each is made once: a project's folder and the folders inside it. */
+export const cloudFolders = sqliteTable(
+  "cloud_folders",
+  {
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    provider: text("provider", { enum: ["dropbox", "gdrive"] }).notNull(),
+    path: text("path").notNull(), // "" for the project folder, else e.g. "Track"
+    remote: text("remote").notNull(), // Dropbox: the full path; Google Drive: the folder id
+  },
+  (t) => [uniqueIndex("cloud_folders_unique").on(t.projectId, t.provider, t.path)],
+);
+
+/**
+ * One file (or the project folder) to copy. Big files go across in pieces, a few at a time, so `offset` and
+ * `session` remember how far it got.
+ */
+export const cloudJobs = sqliteTable(
+  "cloud_jobs",
+  {
+    id: text("id").primaryKey(),
+    studioId: text("studio_id").notNull(),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    provider: text("provider", { enum: ["dropbox", "gdrive"] }).notNull(),
+    kind: text("kind", { enum: ["folder", "file"] }).notNull().default("file"),
+    r2Key: text("r2_key").notNull().default(""),
+    folder: text("folder").notNull().default(""), // folder inside the project, e.g. "Track" or "Videos"
+    name: text("name").notNull().default(""), // file name on the other side
+    size: integer("size").notNull().default(0),
+    offset: integer("offset").notNull().default(0),
+    session: text("session"),
+    status: text("status", { enum: ["waiting", "done", "failed"] }).notNull().default("waiting"),
+    attempts: integer("attempts").notNull().default(0),
+    error: text("error"),
+    nextAt: integer("next_at", { mode: "timestamp_ms" }).notNull(), // not before (retries back off)
+    leaseUntil: integer("lease_until", { mode: "timestamp_ms" }), // being worked on until then
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    doneAt: integer("done_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [
+    uniqueIndex("cloud_jobs_unique").on(t.provider, t.projectId, t.kind, t.r2Key),
+    index("cloud_jobs_waiting").on(t.status, t.nextAt),
+    index("cloud_jobs_project").on(t.projectId, t.provider, t.status),
+  ],
+);
+
+export type CloudLink = typeof cloudLinks.$inferSelect;
+export type CloudJob = typeof cloudJobs.$inferSelect;

@@ -5,6 +5,7 @@ import { db } from "@/lib/env";
 import { photos, sets } from "@/db/schema";
 import { newId } from "@/lib/crypto";
 import { logStudio } from "@/lib/history";
+import { queuePhoto, queueRaw } from "@/lib/cloud/jobs";
 
 type RegisterPhoto = {
   op: "photo";
@@ -88,6 +89,7 @@ export async function POST(request: Request): Promise<Response> {
       });
     }
     await logStudio(project.id, "upload", body.filename.slice(0, 200));
+    await queuePhoto(project.id, twin ? twin.id : body.id);
     revalidatePath(`/admin/p/${project.id}`);
     return json({ ok: true });
   }
@@ -112,6 +114,7 @@ export async function POST(request: Request): Promise<Response> {
       });
     }
     await logStudio(project.id, "upload_raw", body.filename.slice(0, 200));
+    await queueRaw(project.id, body.key, body.filename.slice(0, 200), body.size);
     revalidatePath(`/admin/p/${project.id}`);
     return json({ ok: true, paired: !!match });
   }

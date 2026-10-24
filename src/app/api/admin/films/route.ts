@@ -4,6 +4,7 @@ import { fail, json, projectIdFromKey, studioProject } from "@/lib/api";
 import { db } from "@/lib/env";
 import { films, filmVersions } from "@/db/schema";
 import { logStudio } from "@/lib/history";
+import { queueVersion } from "@/lib/cloud/jobs";
 
 type NewVersion = {
   projectId: string;
@@ -42,6 +43,7 @@ export async function POST(request: Request): Promise<Response> {
     createdAt: new Date(),
   });
   await logStudio(film.projectId, "version", `${film.title} v${version}`);
+  await queueVersion(film.projectId, body.id);
   revalidatePath(`/admin/p/${film.projectId}`);
   return json({ ok: true, version });
 }

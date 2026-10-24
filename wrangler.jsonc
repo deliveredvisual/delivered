@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "delivered-visual",
-  "main": ".open-next/worker.js",
+  "main": "worker.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": {
@@ -9,6 +9,8 @@
     "binding": "ASSETS"
   },
   "observability": { "enabled": true },
+  // Every minute: carry on copying uploads to Dropbox / Google Drive (worker.ts → /api/cloud/pump).
+  "triggers": { "crons": ["* * * * *"] },
   // Database: created in the Cloudflare dashboard (D1 → delivered-visual).
   "d1_databases": [
     {
@@ -30,4 +32,5 @@
     "STUDIO_EMAIL": "hello@alecpender.com"
   }
   // Secrets (set with `npx wrangler secret put NAME`): ADMIN_PASSWORD, SESSION_SECRET
+  // Optional, for copying uploads: DROPBOX_APP_KEY, DROPBOX_APP_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
 }

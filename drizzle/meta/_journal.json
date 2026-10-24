@@ -57,6 +57,13 @@
       "when": 1792737508032,
       "tag": "0007_history",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792799674760,
+      "tag": "0008_cloud_copies",
+      "breakpoints": true
     }
   ]
 }

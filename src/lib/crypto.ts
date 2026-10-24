@@ -87,3 +87,31 @@ export function timingSafeEqual(a: string, b: string): boolean {
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
 }
+
+// ---------- Encrypting stored secrets (Dropbox / Google tokens) ----------
+
+async function aesKey(secret: string) {
+  const raw = await crypto.subtle.digest("SHA-256", enc.encode(`${secret}:stored-secrets`));
+  return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+
+const toB64 = (b: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(b instanceof Uint8Array ? b : new Uint8Array(b))));
+const fromB64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+/** Encrypts a short secret with a key made from SESSION_SECRET: base64(iv).base64(ciphertext) */
+export async function seal(text: string, secret: string): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await aesKey(secret), enc.encode(text));
+  return `${toB64(iv)}.${toB64(ct)}`;
+}
+
+export async function unseal(sealed: string, secret: string): Promise<string | null> {
+  const [iv, ct] = sealed.split(".");
+  if (!iv || !ct) return null;
+  try {
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromB64(iv) }, await aesKey(secret), fromB64(ct));
+    return new TextDecoder().decode(pt);
+  } catch {
+    return null;
+  }
+}

@@ -382,6 +382,16 @@ input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color:
 .add-film .input { flex: 1 1 240px; width: auto; }
 .add-film .select { width: auto; }
 
+/* ---------- Copies to Dropbox / Google Drive ---------- */
+.cloud-status { display: flex; flex-direction: column; gap: 6px; }
+.cloud-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; color: var(--ink-2); }
+.cloud-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); flex: none; }
+.cloud-dot.ok { background: var(--good); }
+.cloud-dot.busy { background: var(--ink); animation: cloud-pulse 1.2s ease-in-out infinite; }
+.cloud-dot.bad { background: var(--warn); }
+@keyframes cloud-pulse { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .cloud-dot.busy { animation: none; } }
+
 /* ---------- History ---------- */
 .history { display: flex; flex-direction: column; gap: 28px; }
 .history-date { color: var(--muted); padding-bottom: 8px; border-bottom: 1px solid var(--ink); }

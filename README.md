@@ -27,6 +27,19 @@ Runs entirely on Cloudflare: the app on Workers, the database on D1, files on R2
 - Videos with versions (v1, v2…), comments pinned to a timecode, resolve, approve
 - NDA mode: confidential notice, right-click saving disabled
 
+**Copies to Dropbox and Google Drive** (Team page → "Copy uploads to Dropbox and Google Drive")
+- The studio owner connects each service once. From then on every new project gets a folder (named
+  "<shot date> <title>"), and every full-res photo, RAW and video version uploaded is copied into it, inside the
+  same folders as on the site (videos go in "Videos"). Dropbox: Apps › Delivered Visual. Google Drive: My Drive ›
+  Delivered Visual (the site can only see what it made there).
+- One way only: moving, renaming or deleting on the site doesn't touch the copies.
+- Projects from before connecting show "Copy N earlier files" under the client link.
+- Copying runs in the background in 32 MB pieces: straight after an upload, every minute (cron in `worker.ts`),
+  and while the project page is open. Failed pieces retry with growing gaps; a removed connection pauses copying
+  and shows "Reconnect" on the Team page.
+- Needs four Secrets: `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Without
+  them the Team page says the service isn't set up yet.
+
 **Accounts and organisations** (`/signup`, `/login`, `/team`)
 - Every account belongs to an organisation (a studio, or a client company like McLaren) with a team. Anyone in it
   can invite colleagues with a one-use link (14 days); the owner manages the team and settings.
@@ -102,6 +115,7 @@ npm run preview                     # the production build in the Workers runtim
 | Chunked uploads into R2 | `src/app/api/admin/upload/route.ts`, browser side in `src/lib/upload-client.ts` |
 | Browser-side ZIPs | `src/lib/zip-client.ts` |
 | Admin screens | `src/app/admin/` |
+| Copies to Dropbox / Google Drive | `src/lib/cloud/` (`providers.ts` talks to each service, `jobs.ts` queues and copies), `src/app/api/cloud/`, `worker.ts` (every-minute run) |
 | History log and its page | `src/lib/history.ts`, `src/components/history-panel.tsx`, `src/app/admin/history/` |
 | Client landing page, gallery and video review | `src/app/p/[slug]/` (`page.tsx` landing, `gallery/`, `video/`) |
 | Chat panel, pins, client folders | `src/app/p/[slug]/client-shell.tsx`, `src/lib/chat.ts`, `src/app/api/p/[slug]/` |
